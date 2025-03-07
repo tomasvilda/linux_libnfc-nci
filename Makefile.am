@@ -237,7 +237,7 @@ libnfc_nci_linux_pn7160_la_SOURCES = \
 
 include_HEADERS = \
 	src/include/linux_nfc_api_pn7160.h \
-	src/include/linux_nfc_factory_api.h \
+	src/include/linux_nfc_factory_api_pn7160.h \
 	src/include/linux_nfc_api_compatibility_pn7160.h
 
 INCLUDE_PARAMS :=$(LIBNFC_NCI_INCLUDE:%=-I$(srcdir)/%)
