@@ -9,7 +9,7 @@ config_DATA = conf/libnfc-nci.conf conf/libnfc-nxp.conf
 pkgconfiglibdir = $(libdir)/pkgconfig
 
 pkgconfiglib_DATA = \
-	libnfc-nci.pc
+	libnfc-nci-pn7160.pc
 
 AM_CPPFLAGS = \
 	-DCONFIG_PATH='"$(configdir)/"' \

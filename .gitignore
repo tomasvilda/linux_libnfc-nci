@@ -61,7 +61,7 @@ Makefile
 /m4
 /missing
 /stamp-h1
-/libnfc-nci.pc
+/libnfc-nci-pn7160.pc
 
 # Editor
 *.orig
