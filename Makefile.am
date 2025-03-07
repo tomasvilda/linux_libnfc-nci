@@ -325,11 +325,7 @@ libnfc_nci_pn7150_linux_la_SOURCES = \
 	$(HALIMPL_SOURCE) \
 	$(SERVICE_SOURCE)
 
-include_HEADERS = src/include/linux_nfc_api.h src/include/linux_nfc_factory_api.h
-
-install-data-hook:
-	mv $(DESTDIR)$(includedir)/linux_nfc_api.h $(DESTDIR)$(includedir)/linux_nfc_api_pn7150.h
-	mv $(DESTDIR)$(includedir)/linux_nfc_factory_api.h $(DESTDIR)$(includedir)/linux_nfc_factory_api_pn7150.h
+include_HEADERS = src/include/linux_nfc_api_pn7150.h src/include/linux_nfc_factory_api_pn7150.h
 
 INCLUDE_PARAMS :=$(LIBNFC_NCI_INCLUDE:%=-I$(srcdir)/%)
 INCLUDE_PARAMS +=$(HALIMPL_INCLUDE:%=-I$(srcdir)/%)

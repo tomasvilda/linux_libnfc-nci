@@ -16,7 +16,7 @@
  *
  ******************************************************************************/
 
-#include "linux_nfc_api.h"
+#include "linux_nfc_api_pn7150.h"
 #include "nativeNfcManager.h"
 #include "nativeNfcTag.h"
 #include "nativeNfcSnep.h"

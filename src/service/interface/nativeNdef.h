@@ -19,7 +19,7 @@
 #define __NATIVE_NDEF__H__
 
 #include "data_types.h"
-#include "linux_nfc_api.h"
+#include "linux_nfc_api_pn7150.h"
 
 #ifdef __cplusplus
 extern "C" {

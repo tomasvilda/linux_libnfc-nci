@@ -41,7 +41,7 @@
 extern "C"
 {
     #include "data_types.h"
-    #include "linux_nfc_api.h"
+    #include "linux_nfc_api_pn7150.h"
     #include "nfa_api.h"
     #include "nfa_ee_api.h"
 }
