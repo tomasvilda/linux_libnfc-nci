@@ -19,7 +19,7 @@
 #ifndef __LINUX_NFC_API__H__
 #define __LINUX_NFC_API__H__
 
-#include "linux_nfc_api_compatibility.h"
+#include "linux_nfc_api_compatibility_pn7160.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -16,8 +16,8 @@
  *
  ******************************************************************************/
 
-#ifndef __LINUX_NFC_API_COMPATIBILITY_H__
-#define __LINUX_NFC_API_COMPATIBILITY_H__
+#ifndef __linux_nfc_api_compatibility_pn7160.h_H__
+#define __linux_nfc_api_compatibility_pn7160.h_H__
 
 #ifndef NXP_NEW_MW_API_COMPATIBILITY
 
@@ -75,4 +75,4 @@ extern "C" {
 
 #endif //NXP_NEW_MW_API_COMPATIBILITY
 
-#endif //__LINUX_NFC_API_COMPATIBILITY_H__
+#endif //__linux_nfc_api_compatibility_pn7160.h_H__

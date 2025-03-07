@@ -45,7 +45,7 @@ AC_CHECK_FUNCS([select])
 AC_CHECK_FUNCS([dlopen])
 
 AC_CONFIG_FILES([Makefile])
-AC_CONFIG_FILES([libnfc-nci.pc])
+AC_CONFIG_FILES([libnfc-nci-pn7160.pc])
 
 test -z "$SED" && SED=sed
 
