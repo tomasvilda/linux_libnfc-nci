@@ -1,6 +1,6 @@
 lib_LTLIBRARIES = libnfc_nci_pn7150_linux.la
 
-sbin_PROGRAMS = nfcDemoApp 
+sbin_PROGRAMS = nfcDemoApp_7150 
 nfcDemoApp_DEPENDENCIES = libnfc_nci_pn7150_linux.la
 
 configdir = ${sysconfdir}/pn7150
@@ -368,4 +368,4 @@ libnfc_nci_pn7150_linux_la_LIBADD = $(AC_LIBOBJS)
 libnfc_nci_pn7150_linux_la_LDFLAGS := $(AM_LDFLAGS)
 libnfc_nci_pn7150_linux_la_LDFLAGS += -shared -pthread -ldl -lrt -fPIC -release 1 -version-info 0:0:0
 
-nfcDemoApp_LDFLAGS = -pthread -ldl -lrt -lnfc_nci_linux
+nfcDemoApp_LDFLAGS = -pthread -ldl -lrt -lnfc_nci_pn7150_linux
