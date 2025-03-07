@@ -1,7 +1,7 @@
-lib_LTLIBRARIES = libnfc_nci_linux_pn7160.la
+lib_LTLIBRARIES = libnfc_nci_pn7160_linux.la
 
 sbin_PROGRAMS = nfcDemoApp_pn7160
-nfcDemoApp_pn7160_DEPENDENCIES = libnfc_nci_linux_pn7160.la
+nfcDemoApp_pn7160_DEPENDENCIES = libnfc_nci_pn7160_linux.la
 configdir = ${sysconfdir}/pn7160
 
 config_DATA = conf/libnfc-nci.conf conf/libnfc-nxp.conf
@@ -15,7 +15,7 @@ AM_CPPFLAGS = \
 	-DCONFIG_PATH='"$(configdir)/"' \
 	-I$(srcdir)/src/include \
 	$(INCLUDE_PARAMS) \
-	$(libnfc_nci_linux_pn7160_la_FLAGS) \
+	$(libnfc_nci_pn7160_linux_la_FLAGS) \
 	-DNXP_EXTNS=TRUE \
 	-DLINUX \
 	-DSNEP_ENABLED
@@ -230,7 +230,7 @@ nfcDemoApp_pn7160_SOURCES := \
 	demoapp/tools.c
 
 
-libnfc_nci_linux_pn7160_la_SOURCES = \
+libnfc_nci_pn7160_linux_la_SOURCES = \
 	$(LIBNFC_NCI_SOURCE) \
 	$(HALIMPL_SOURCE) \
 	$(SERVICE_SOURCE)
@@ -244,31 +244,31 @@ INCLUDE_PARAMS :=$(LIBNFC_NCI_INCLUDE:%=-I$(srcdir)/%)
 INCLUDE_PARAMS +=$(HALIMPL_INCLUDE:%=-I$(srcdir)/%)
 INCLUDE_PARAMS +=$(SERVICE_INCLUDE:%=-I$(srcdir)/%)
 
-libnfc_nci_linux_pn7160_la_FLAGS =
+libnfc_nci_pn7160_linux_la_FLAGS =
 
 if DEBUG
-libnfc_nci_linux_pn7160_la_FLAGS += -DDEBUG
+libnfc_nci_pn7160_linux_la_FLAGS += -DDEBUG
 else
-libnfc_nci_linux_pn7160_la_FLAGS += -DNDEBUG
+libnfc_nci_pn7160_linux_la_FLAGS += -DNDEBUG
 endif
 
-libnfc_nci_linux_pn7160_la_FLAGS += -pthread -w
-libnfc_nci_linux_pn7160_la_FLAGS += -DNFC_NXP_NOT_OPEN_INCLUDED=TRUE
-libnfc_nci_linux_pn7160_la_FLAGS += -DNXP_HW_SELF_TEST
-libnfc_nci_linux_pn7160_la_FLAGS += -DNXP_NFC_NATIVE_ENABLE_HCE=TRUE
+libnfc_nci_pn7160_linux_la_FLAGS += -pthread -w
+libnfc_nci_pn7160_linux_la_FLAGS += -DNFC_NXP_NOT_OPEN_INCLUDED=TRUE
+libnfc_nci_pn7160_linux_la_FLAGS += -DNXP_HW_SELF_TEST
+libnfc_nci_pn7160_linux_la_FLAGS += -DNXP_NFC_NATIVE_ENABLE_HCE=TRUE
 
 if LLCP1_3
-libnfc_nci_linux_pn7160_la_FLAGS += -DNFC_NXP_LLCP_SECURED_P2P=TRUE
+libnfc_nci_pn7160_linux_la_FLAGS += -DNFC_NXP_LLCP_SECURED_P2P=TRUE
 else
-libnfc_nci_linux_pn7160_la_FLAGS += -DNFC_NXP_LLCP_SECURED_P2P=FALSE
+libnfc_nci_pn7160_linux_la_FLAGS += -DNFC_NXP_LLCP_SECURED_P2P=FALSE
 endif
 
-libnfc_nci_linux_pn7160_la_FLAGS += -DPH_NCI_NXP_HAL_ENABLE_FW_DOWNLOAD=FALSE
-libnfc_nci_linux_pn7160_la_FLAGS += -DNXP_NEW_MW_API_COMPATIBILITY
+libnfc_nci_pn7160_linux_la_FLAGS += -DPH_NCI_NXP_HAL_ENABLE_FW_DOWNLOAD=FALSE
+libnfc_nci_pn7160_linux_la_FLAGS += -DNXP_NEW_MW_API_COMPATIBILITY
 
-libnfc_nci_linux_pn7160_la_LIBADD = $(AC_LIBOBJS)
-libnfc_nci_linux_pn7160_la_LDFLAGS := $(AM_LDFLAGS)
-libnfc_nci_linux_pn7160_la_LDFLAGS += -shared -pthread -ldl -lrt -fPIC -release 1 -version-info 0:0:0
+libnfc_nci_pn7160_linux_la_LIBADD = $(AC_LIBOBJS)
+libnfc_nci_pn7160_linux_la_LDFLAGS := $(AM_LDFLAGS)
+libnfc_nci_pn7160_linux_la_LDFLAGS += -shared -pthread -ldl -lrt -fPIC -release 1 -version-info 0:0:0
 
 nfcDemoApp_pn7160_LDFLAGS = -pthread -ldl -lrt -lnfc_nci_pn7160_linux
 
