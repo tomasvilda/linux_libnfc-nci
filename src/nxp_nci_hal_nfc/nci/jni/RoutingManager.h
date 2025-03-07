@@ -46,7 +46,7 @@
 #include "nfa_ee_api.h"
 #include <iostream>
 #ifdef LINUX
-#include "linux_nfc_api.h"
+#include "linux_nfc_api_7160.h"
 #include "nativeNfcManager.h"
 #endif
 

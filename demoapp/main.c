@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
-#include "linux_nfc_api.h"
+#include "linux_nfc_api_7160.h"
 #include "tools.h"
 typedef enum eDevState
 {

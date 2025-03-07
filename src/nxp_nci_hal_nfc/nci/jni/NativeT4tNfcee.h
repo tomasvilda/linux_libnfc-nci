@@ -19,7 +19,7 @@
 #include "NfcJniUtil.h"
 #include "SyncEvent.h"
 #include "nfa_api.h"
-#include "linux_nfc_api.h"
+#include "linux_nfc_api_7160.h"
 #ifndef LINUX
 #include <nativehelper/ScopedLocalRef.h>
 #endif
