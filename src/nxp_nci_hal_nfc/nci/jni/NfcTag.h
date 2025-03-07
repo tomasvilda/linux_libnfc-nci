@@ -43,7 +43,7 @@
 
 #include "nfa_rw_api.h"
 #ifdef LINUX
-#include "linux_nfc_api_7160.h"
+#include "linux_nfc_api_pn7160.h"
 #define MAX_TAGS_DISCOVERED   0x11U
 #endif
 #define MIN_FWI (11)

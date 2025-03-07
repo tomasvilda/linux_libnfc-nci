@@ -19,7 +19,7 @@
 #define __NATIVE_NDEF__H__
 
 #include "data_types.h"
-#include "linux_nfc_api_7160.h"
+#include "linux_nfc_api_pn7160.h"
 
 extern nfc_friendly_type_t nativeNdef_getFriendlyType(UINT8 tnf, UINT8 *type, UINT8 typeLength);
 
