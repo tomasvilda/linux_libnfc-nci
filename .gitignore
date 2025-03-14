@@ -62,6 +62,7 @@ Makefile
 /missing
 /stamp-h1
 /libnfc-nci-pn7150.pc
+/arm-inbalance-linux-gnueabi-libtool
 
 # Editor
 *.orig
