@@ -63,6 +63,7 @@ Makefile
 /stamp-h1
 /libnfc-nci-pn7160.pc
 /arm-inbalance-linux-gnueabi-libtool
+/nfcDemoApp_pn7160
 
 # Editor
 *.orig
