@@ -304,16 +304,6 @@ NFCSTATUS phTmlNfc_i2c_open_and_configure(pphTmlNfc_Config_t pConfig, void ** pL
 
     *pLinkHandle = (void*) ((intptr_t)nHandle);
 
-    /* Set non-blocking mode for reads. The pn5xx driver lacks poll(), so
-     * select() always returns immediately and blocking reads hang forever
-     * when the chip is idle or disconnected. With O_NONBLOCK, reads return
-     * -EAGAIN when no data is available (IRQ low), allowing proper timeout
-     * handling and freeing the driver's read_mutex for write probes. */
-    int flags = fcntl(nHandle, F_GETFL, 0);
-    if (flags >= 0) {
-        fcntl(nHandle, F_SETFL, flags | O_NONBLOCK);
-    }
-
     /*Reset PN54X*/
     phTmlNfc_i2c_reset((void *)((intptr_t)nHandle), 1);
     usleep(100 * 1000);
