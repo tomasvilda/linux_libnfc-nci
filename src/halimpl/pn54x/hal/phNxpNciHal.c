@@ -648,6 +648,12 @@ force_download:
         }
 #else
         phDnldNfc_ReSetHwDevHandle();
+        /* FW download disabled: if we got here via force_download with a
+         * failure status, clean up properly instead of falling through. */
+        if (wConfigStatus != NFCSTATUS_SUCCESS)
+        {
+            goto clean_and_return;
+        }
 #endif
 
     }
@@ -662,6 +668,19 @@ force_download:
      * Some failure paths above already call phTmlNfc_Shutdown() before
      * jumping here — that's safe because Shutdown checks for NULL context. */
     phTmlNfc_Shutdown_CleanUp();
+    /* Clean up client thread (detached) and message queue.
+     * The thread blocks in sem_wait inside phDal4Nfc_msgrcv —
+     * send a dummy message to unblock it, then release the queue. */
+    if (nxpncihal_ctrl.thread_running == 1)
+    {
+        nxpncihal_ctrl.thread_running = 0;
+        phLibNfc_Message_t dummyMsg;
+        memset(&dummyMsg, 0, sizeof(dummyMsg));
+        dummyMsg.eMsgType = NCI_HAL_ERROR_MSG;
+        phDal4Nfc_msgsnd(nxpncihal_ctrl.gDrvCfg.nClientId, &dummyMsg, 0);
+        usleep(1000);
+    }
+    phDal4Nfc_msgrelease(nxpncihal_ctrl.gDrvCfg.nClientId);
     /* Report error status */
     (*nxpncihal_ctrl.p_nfc_stack_cback)(HAL_NFC_OPEN_CPLT_EVT,
             HAL_NFC_STATUS_FAILED);

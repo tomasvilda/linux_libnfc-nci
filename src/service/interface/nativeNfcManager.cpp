@@ -1456,8 +1456,7 @@ INT32 nativeNfcManager_doInitialize ()
     // Calling Finalize() here corrupts GKI global state (gki_cb), making any
     // subsequent doInitialize() segfault because GKI_init() cannot safely
     // re-initialize already-destroyed pthread mutexes.
-    NfcAdaptInstance.Finalize();
-    sNfaAdaptationInitialized = false;
+    // The stale cleanup at the start of doInitialize() handles this case.
 
 TheEnd:
     NXPLOG_API_D ("%s: nfc enabled = %x", __FUNCTION__, sIsNfaEnabled);

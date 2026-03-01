@@ -27,6 +27,7 @@
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <errno.h>
+#include <time.h>
 
 #include <linux/i2c-dev.h>
 #include <linux/i2c.h>
@@ -46,6 +47,12 @@
 /* I2C write retry for transient bus errors */
 #define MAX_I2C_WRITE_RETRY         3
 #define I2C_WRITE_RETRY_DELAY_US    5000
+/* Polling interval for non-blocking reads (EAGAIN handling).
+ * The pn5xx driver lacks poll(), so select() always returns POLLIN.
+ * With O_NONBLOCK, read() returns EAGAIN when no IRQ is pending.
+ * We poll every 10ms for up to 2 seconds (matching original timeout). */
+#define I2C_READ_POLL_INTERVAL_US   10000
+#define I2C_READ_TIMEOUT_MS         2000
 static bool_t bFwDnldFlag = FALSE;
 
 // ----------------------------------------------------------------------------
@@ -304,6 +311,19 @@ NFCSTATUS phTmlNfc_i2c_open_and_configure(pphTmlNfc_Config_t pConfig, void ** pL
 
     *pLinkHandle = (void*) ((intptr_t)nHandle);
 
+    /* Set non-blocking mode. The pn5xx driver lacks poll() fops, so
+     * select() always returns POLLIN immediately. With O_NONBLOCK,
+     * read() returns -EAGAIN instead of blocking in the kernel's
+     * wait_event_interruptible(), which:
+     *  - allows TML shutdown to complete (reader thread can exit)
+     *  - releases the driver's read_mutex between attempts so
+     *    isNfcConnected() write probes don't deadlock
+     * The EAGAIN is handled by a polling loop in phTmlNfc_i2c_read(). */
+    int flags = fcntl(nHandle, F_GETFL, 0);
+    if (flags >= 0) {
+        fcntl(nHandle, F_SETFL, flags | O_NONBLOCK);
+    }
+
     /*Reset PN54X*/
     phTmlNfc_i2c_reset((void *)((intptr_t)nHandle), 1);
     usleep(100 * 1000);
@@ -329,24 +349,97 @@ NFCSTATUS phTmlNfc_i2c_open_and_configure(pphTmlNfc_Config_t pConfig, void ** pL
 **                  -1        - read operation failure
 **
 *******************************************************************************/
+/*******************************************************************************
+**
+** Function         phTmlNfc_i2c_read_poll
+**
+** Description      Non-blocking read with EAGAIN polling. The pn5xx driver
+**                  lacks poll() fops, so with O_NONBLOCK, read() returns
+**                  EAGAIN when no IRQ is pending. This function polls with
+**                  a 10ms sleep between attempts, up to timeout_ms total.
+**
+** Returns          >0  number of bytes read
+**                  -1  timeout or real I/O error
+**
+*******************************************************************************/
+static int phTmlNfc_i2c_read_poll(int fd, uint8_t *buf, int len, int timeout_ms)
+{
+    struct timespec start, now;
+    int ret;
+    long elapsed_ms;
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for (;;)
+    {
+        ret = read(fd, buf, len);
+        if (ret > 0)
+        {
+            return ret;
+        }
+        if (ret == 0)
+        {
+            return -1; /* EOF */
+        }
+        /* ret < 0 */
+        if (errno != EAGAIN && errno != EWOULDBLOCK)
+        {
+            return -1; /* real error */
+        }
+        /* EAGAIN: no data yet, check timeout */
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        elapsed_ms = (now.tv_sec - start.tv_sec) * 1000 +
+                     (now.tv_nsec - start.tv_nsec) / 1000000;
+        if (elapsed_ms >= timeout_ms)
+        {
+            return -1; /* timeout */
+        }
+        usleep(I2C_READ_POLL_INTERVAL_US);
+    }
+}
+
 int phTmlNfc_i2c_read(void *pDevHandle, uint8_t * pBuffer, int nNbBytesToRead)
 {
     int ret_Read;
     int numRead = 0;
     uint16_t totalBtyesToRead = 0;
-    
+    int fd;
+
 #ifdef PHFL_TML_ALT_NFC
   // Overwrite handle
   pDevHandle = (void*)iI2CFd;
 #endif
-  
-    int ret_Select;
-    struct timeval tv;
-    fd_set rfds;
 
     UNUSED(nNbBytesToRead);
     if (NULL == pDevHandle)
     {
+        return -1;
+    }
+
+    fd = (intptr_t)pDevHandle;
+
+    if (FALSE == bFwDnldFlag)
+    {
+        totalBtyesToRead = NORMAL_MODE_HEADER_LEN;
+    }
+    else
+    {
+        totalBtyesToRead = FW_DNLD_HEADER_LEN;
+    }
+
+    /* Read header using polling loop (handles EAGAIN from O_NONBLOCK).
+       Timeout of 2 seconds matches the original select()-based approach. */
+#ifdef PHFL_TML_ALT_NFC
+    wait4interrupt();
+#endif
+    ret_Read = phTmlNfc_i2c_read_poll(fd, pBuffer, totalBtyesToRead - numRead,
+                                       I2C_READ_TIMEOUT_MS);
+    if (ret_Read > 0)
+    {
+        numRead += ret_Read;
+    }
+    else
+    {
+        NXPLOG_TML_E("_i2c_read() [hdr] errno : %x", errno);
         return -1;
     }
 
@@ -359,103 +452,56 @@ int phTmlNfc_i2c_read(void *pDevHandle, uint8_t * pBuffer, int nNbBytesToRead)
         totalBtyesToRead = FW_DNLD_HEADER_LEN;
     }
 
-    /* Read with 2 second timeout, so that the read thread can be aborted
-       when the PN54X does not respond and we need to switch to FW download
-       mode. This should be done via a control socket instead. */
-    FD_ZERO(&rfds);
-    FD_SET((intptr_t) pDevHandle, &rfds);
-    tv.tv_sec = 2;
-    tv.tv_usec = 1;
-
-    ret_Select = select((int)((intptr_t)pDevHandle + (int)1), &rfds, NULL, NULL, &tv);
-    if (ret_Select < 0)
+    if (numRead < totalBtyesToRead)
     {
-        NXPLOG_TML_E("i2c select() errno : %x",errno);
-        return -1;
+#ifdef PHFL_TML_ALT_NFC
+        wait4interrupt();
+#endif
+        ret_Read = phTmlNfc_i2c_read_poll(fd, pBuffer + numRead,
+                                           totalBtyesToRead - numRead,
+                                           I2C_READ_TIMEOUT_MS);
+        if (ret_Read > 0)
+        {
+            numRead += ret_Read;
+        }
+        else
+        {
+            NXPLOG_TML_E("_i2c_read() [hdr2] errno : %x", errno);
+            return -1;
+        }
     }
-    else if (ret_Select == 0)
+
+    if (TRUE == bFwDnldFlag)
     {
-        NXPLOG_TML_E("i2c select() Timeout");
-        return -1;
+        totalBtyesToRead = pBuffer[FW_DNLD_LEN_OFFSET] + FW_DNLD_HEADER_LEN + CRC_LEN;
     }
     else
     {
-#ifdef PHFL_TML_ALT_NFC
-        wait4interrupt();
-#endif
-        ret_Read = read((intptr_t)pDevHandle, pBuffer, totalBtyesToRead - numRead);
-        if (ret_Read > 0)
-        {
-            numRead += ret_Read;
-        }
-        else if (ret_Read == 0)
-        {
-            NXPLOG_TML_E("_i2c_read() [hdr]EOF");
-            return -1;
-        }
-        else
-        {
-            NXPLOG_TML_E("_i2c_read() [hdr] errno : %x",errno);
-            return -1;
-        }
+        totalBtyesToRead = pBuffer[NORMAL_MODE_LEN_OFFSET] + NORMAL_MODE_HEADER_LEN;
+    }
 
+    /* Read payload */
+#ifdef PHFL_TML_ALT_NFC
+    wait4interrupt();
+#endif
+    ret_Read = phTmlNfc_i2c_read_poll(fd, pBuffer + numRead,
+                                       totalBtyesToRead - numRead,
+                                       I2C_READ_TIMEOUT_MS);
+    if (ret_Read > 0)
+    {
+        numRead += ret_Read;
+    }
+    else
+    {
         if (FALSE == bFwDnldFlag)
         {
-            totalBtyesToRead = NORMAL_MODE_HEADER_LEN;
+            NXPLOG_TML_E("_i2c_read() [hdr] received");
+            phNxpNciHal_print_packet("RECV", pBuffer, NORMAL_MODE_HEADER_LEN);
         }
-        else
-        {
-            totalBtyesToRead = FW_DNLD_HEADER_LEN;
-        }
-
-        if(numRead < totalBtyesToRead)
-        {
-#ifdef PHFL_TML_ALT_NFC
-            wait4interrupt();
-#endif
-            ret_Read = read((intptr_t)pDevHandle, pBuffer, totalBtyesToRead - numRead);
-            if (ret_Read != totalBtyesToRead - numRead)
-            {
-                NXPLOG_TML_E("_i2c_read() [hdr] errno : %x",errno);
-                return -1;
-            }
-            else
-            {
-                numRead += ret_Read;
-            }
-        }
-        if(TRUE == bFwDnldFlag)
-        {
-            totalBtyesToRead = pBuffer[FW_DNLD_LEN_OFFSET] + FW_DNLD_HEADER_LEN + CRC_LEN;
-        }
-        else
-        {
-            totalBtyesToRead = pBuffer[NORMAL_MODE_LEN_OFFSET] + NORMAL_MODE_HEADER_LEN;
-        }
-#ifdef PHFL_TML_ALT_NFC
-        wait4interrupt();
-#endif
-        ret_Read = read((intptr_t)pDevHandle, (pBuffer + numRead), totalBtyesToRead - numRead);
-        if (ret_Read > 0)
-        {
-            numRead += ret_Read;
-        }
-        else if (ret_Read == 0)
-        {
-            NXPLOG_TML_E("_i2c_read() [pyld] EOF");
-            return -1;
-        }
-        else
-        {
-            if(FALSE == bFwDnldFlag)
-            {
-                NXPLOG_TML_E("_i2c_read() [hdr] received");
-                phNxpNciHal_print_packet("RECV",pBuffer, NORMAL_MODE_HEADER_LEN);
-            }
-            NXPLOG_TML_E("_i2c_read() [pyld] errno : %x",errno);
-            return -1;
-        }
+        NXPLOG_TML_E("_i2c_read() [pyld] errno : %x", errno);
+        return -1;
     }
+
     return numRead;
 }
 
