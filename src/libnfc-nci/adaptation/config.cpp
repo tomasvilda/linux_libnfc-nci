@@ -48,8 +48,8 @@
 const char alternative_config_path[] = CONFIG_PATH;
 const char transport_config_path[] = "/etc/";
 
-#define config_name             "libnfc-nci.conf"
-#define extra_config_base       "libnfc-nci-"
+#define config_name             "libnfc-nci-pn7150.conf"
+#define extra_config_base       "libnfc-nci-pn7150-"
 #define extra_config_ext        ".conf"
 #define     IsStringValue       0x80000000
 

@@ -55,14 +55,14 @@ const char alternative_config_path[] = CONFIG_PATH;
 const char transport_config_path[] = "/etc/";
 
 //#define config_name             "libnfc-nxp.conf"
-#define config_base       "libnfc-nxp-"
+#define config_base       "libnfc-nxp-pn7150-"
 #define config_ext        ".conf"
 #define config_init       "init"
 #define config_pn547      "pn547"
 #define config_pn548      "pn548"
 #define IsStringValue       0x80000000
 
-const char config_timestamp_path[] = "/var/tmp/libnfc-nxp-stamp-h1";
+const char config_timestamp_path[] = "/var/tmp/libnfc-nxp-pn7150-stamp-h1";
 
 using namespace::std;
 

@@ -1348,7 +1348,7 @@ INT32 nativeNfcManager_doInitialize ()
     }
     if (!isNxpConfigValid(NXP_CONFIG_TYPE_INIT))
     {
-        NXPLOG_API_E ("%s: can't find libnfc-nxp-init.conf file", __FUNCTION__);
+        NXPLOG_API_E ("%s: can't find libnfc-nxp-pn7150-init.conf file", __FUNCTION__);
         gSyncMutex.unlock();
         return sIsNfaEnabled;
     }

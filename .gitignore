@@ -66,3 +66,8 @@ Makefile
 # Editor
 *.orig
 *.rej
+arm-inbalance-linux-gnueabi-libtool
+config1.h
+config1.h.in
+libnfc-nci-pn7160.pc
+nfcDemoApp_pn7160
