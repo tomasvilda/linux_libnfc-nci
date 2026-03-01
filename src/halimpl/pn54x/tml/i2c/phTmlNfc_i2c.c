@@ -43,6 +43,9 @@
 #define FW_DNLD_LEN_OFFSET          1
 #define NORMAL_MODE_LEN_OFFSET      2
 #define FRAGMENTSIZE_MAX            PHNFC_I2C_FRAGMENT_SIZE
+/* I2C write retry for transient bus errors */
+#define MAX_I2C_WRITE_RETRY         3
+#define I2C_WRITE_RETRY_DELAY_US    5000
 static bool_t bFwDnldFlag = FALSE;
 
 // ----------------------------------------------------------------------------
@@ -301,6 +304,16 @@ NFCSTATUS phTmlNfc_i2c_open_and_configure(pphTmlNfc_Config_t pConfig, void ** pL
 
     *pLinkHandle = (void*) ((intptr_t)nHandle);
 
+    /* Set non-blocking mode for reads. The pn5xx driver lacks poll(), so
+     * select() always returns immediately and blocking reads hang forever
+     * when the chip is idle or disconnected. With O_NONBLOCK, reads return
+     * -EAGAIN when no data is available (IRQ low), allowing proper timeout
+     * handling and freeing the driver's read_mutex for write probes. */
+    int flags = fcntl(nHandle, F_GETFL, 0);
+    if (flags >= 0) {
+        fcntl(nHandle, F_SETFL, flags | O_NONBLOCK);
+    }
+
     /*Reset PN54X*/
     phTmlNfc_i2c_reset((void *)((intptr_t)nHandle), 1);
     usleep(100 * 1000);
@@ -502,7 +515,33 @@ int phTmlNfc_i2c_write(void *pDevHandle, uint8_t * pBuffer, int nNbBytesToWrite)
                 numBytes = nNbBytesToWrite;
             }
         }
-        ret = write((intptr_t)pDevHandle, pBuffer + numWrote, numBytes - numWrote);
+        {
+            int write_retry;
+            for (write_retry = 0; write_retry < MAX_I2C_WRITE_RETRY; write_retry++)
+            {
+                ret = write((intptr_t)pDevHandle, pBuffer + numWrote, numBytes - numWrote);
+                if (ret > 0)
+                {
+                    break;
+                }
+                else if (ret < 0 && (errno == EINTR || errno == EAGAIN))
+                {
+                    continue;
+                }
+                else if (ret < 0)
+                {
+                    /* Chip may NACK transiently - retry after short delay */
+                    NXPLOG_TML_D("_i2c_write() failed (try %d/%d), errno: %x",
+                                 write_retry + 1, MAX_I2C_WRITE_RETRY, errno);
+                    usleep(I2C_WRITE_RETRY_DELAY_US);
+                }
+                else
+                {
+                    /* ret == 0: EOF */
+                    break;
+                }
+            }
+        }
         if (ret > 0)
         {
             numWrote += ret;
@@ -518,11 +557,8 @@ int phTmlNfc_i2c_write(void *pDevHandle, uint8_t * pBuffer, int nNbBytesToWrite)
         }
         else
         {
-            NXPLOG_TML_E("_i2c_write() errno : %x",errno);
-            if (errno == EINTR || errno == EAGAIN)
-            {
-                continue;
-            }
+            NXPLOG_TML_E("_i2c_write() errno : %x (after %d retries)",
+                         errno, MAX_I2C_WRITE_RETRY);
             return -1;
         }
     }

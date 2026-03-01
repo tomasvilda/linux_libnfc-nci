@@ -132,6 +132,9 @@ typedef struct phTmlNfc_ReadWriteInfo
 /*
  *Base Context Structure containing members required for entire session
  */
+/* Number of consecutive read failures before declaring device disconnected */
+#define PHTMLNFC_DISCONNECT_THRESHOLD (10U)
+
 typedef struct phTmlNfc_Context
 {
     pthread_t readerThread; /*Handle to the thread which handles write and read operations */
@@ -149,6 +152,10 @@ typedef struct phTmlNfc_Context
     sem_t   rxSemaphore;
     sem_t   txSemaphore; /* Lock/Aquire txRx Semaphore */
     sem_t   postMsgSemaphore; /* Semaphore to post message atomically by Reader & writer thread */
+    volatile uint8_t bDeviceConnected;   /* Flag: 1 if NFCC is reachable, 0 if
+                                            disconnected */
+    volatile uint16_t consecutiveReadFailures; /* Counter for sequential I2C read
+                                                  errors */
 } phTmlNfc_Context_t;
 
 /*
@@ -206,4 +213,6 @@ void phTmlNfc_DeferredCall(uintptr_t dwThreadId, phLibNfc_Message_t *ptWorkerMsg
 void phTmlNfc_ConfigNciPktReTx( phTmlNfc_ConfigRetrans_t eConfig, uint8_t bRetryCount);
 void phTmlNfc_set_fragmentation_enabled(phTmlNfc_i2cfragmentation_t enable);
 phTmlNfc_i2cfragmentation_t phTmlNfc_get_fragmentation_enabled();
+uint8_t phTmlNfc_IsConnected(void);
+NFCSTATUS phTmlNfc_Shutdown_CleanUp(void);
 #endif /*  PHTMLNFC_H  */

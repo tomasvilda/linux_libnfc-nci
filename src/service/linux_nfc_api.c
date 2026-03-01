@@ -24,6 +24,8 @@
 #include "nativeNdef.h"
 #include "nfa_api.h"
 #include "nativeNfcLlcp.h"
+#include "phTmlNfc.h"
+#include "phNxpNciHal.h"
 
 int ndef_readText(unsigned char *ndef_buff, unsigned int ndef_buff_length, char * out_text, unsigned int out_text_length)
 {
@@ -177,6 +179,18 @@ int nfcManager_isNfcActive()
 {
     int ret;
     ret = nativeNfcManager_isNfcActive();
+    return ret;
+}
+
+int nfcManager_isNfcConnected()
+{
+    return (int)phTmlNfc_IsConnected();
+}
+
+int nfcManager_doReconnect()
+{
+    int ret;
+    ret = phNxpNciHal_Reconnect();
     return ret;
 }
 

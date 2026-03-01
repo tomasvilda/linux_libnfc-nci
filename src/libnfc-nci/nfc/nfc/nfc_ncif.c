@@ -268,8 +268,10 @@ void nfc_ncif_cmd_timeout (void)
     {
         nfc_enabled (NFC_STATUS_FAILED, NULL);
     }
-    /* XXX maco since this failure is unrecoverable, abort the process */
-    abort();
+    /* Do NOT abort() - let the application handle recovery via doReconnect().
+     * Aborting kills the entire process, preventing graceful reconnection
+     * after physical disconnect/reconnect of the NFC chip. */
+    NFC_TRACE_ERROR0("nfc_ncif_cmd_timeout: NFCC unresponsive, skipping abort()");
 #endif
 }
 
