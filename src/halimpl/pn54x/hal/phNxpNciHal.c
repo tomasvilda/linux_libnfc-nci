@@ -2379,7 +2379,7 @@ int phNxpNciHal_Reconnect(void)
     }
 
     /* Step 3: Close stale device handle and clean up */
-    phTmlNfc_CleanUp();
+    phTmlNfc_Shutdown_CleanUp();
     usleep(500 * 1000); /* 500ms wait for device to stabilize */
 
     /* Step 4: Re-read device node and re-initialize TML */

@@ -370,4 +370,4 @@ libnfc_nci_pn7150_la_LIBADD = $(AC_LIBOBJS)
 libnfc_nci_pn7150_la_LDFLAGS := $(AM_LDFLAGS)
 libnfc_nci_pn7150_la_LDFLAGS += -shared -pthread -ldl -lrt -fPIC -release 1 -version-info 0:0:0
 
-nfcDemoApp_pn7150_LDFLAGS = -pthread -ldl -lrt -lnfc_nci_linux
+nfcDemoApp_pn7150_LDFLAGS = -pthread -ldl -lrt -lnfc_nci_pn7150
