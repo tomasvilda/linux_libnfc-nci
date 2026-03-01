@@ -24,6 +24,14 @@
 #include <phDal4Nfc_messageQueueLib.h>
 #include <phTmlNfc_i2c.h>
 #include <phNxpNciHal_utils.h>
+#include <signal.h>
+
+/* Empty handler for SIGUSR1 - used to interrupt blocking read() in the
+ * pn5xx driver's wait_event_interruptible() during TML shutdown. */
+static void phTmlNfc_SignalHandler(int sig)
+{
+    (void)sig;
+}
 
 #define CUSTOM_MAX_READ_ERROR_BEFORE_ABORT 100
 static uint8_t s_customReadErrCounter = 0;
@@ -700,6 +708,19 @@ NFCSTATUS phTmlNfc_Shutdown(void)
     /* Check whether TML is Initialized */
     if (NULL != gpphTmlNfc_Context)
     {
+        /* Install SIGUSR1 handler so it interrupts blocking syscalls
+         * (like read() in pn5xx driver's wait_event_interruptible)
+         * instead of killing the process. SA_RESTART is NOT set so
+         * the interrupted syscall returns -EINTR. */
+        {
+            struct sigaction sa;
+            memset(&sa, 0, sizeof(sa));
+            sa.sa_handler = phTmlNfc_SignalHandler;
+            sigemptyset(&sa.sa_mask);
+            sa.sa_flags = 0; /* Do NOT use SA_RESTART */
+            sigaction(SIGUSR1, &sa, NULL);
+        }
+
         /* Reset thread variable to terminate the thread */
         gpphTmlNfc_Context->bThreadDone = 0;
         usleep(1000);
@@ -712,6 +733,15 @@ NFCSTATUS phTmlNfc_Shutdown(void)
         usleep(1000);
         sem_post(&gpphTmlNfc_Context->postMsgSemaphore);
         usleep(1000);
+
+        /* Send SIGUSR1 to interrupt any blocking read()/write() in the
+         * pn5xx driver. Without this, pthread_join hangs forever when the
+         * reader thread is stuck in the kernel's wait_event_interruptible
+         * (e.g. after VEN LOW powers off the chip). */
+        pthread_kill(gpphTmlNfc_Context->readerThread, SIGUSR1);
+        pthread_kill(gpphTmlNfc_Context->writerThread, SIGUSR1);
+        usleep(1000);
+
         if (0 != pthread_join(gpphTmlNfc_Context->readerThread, (void**)NULL))
         {
             NXPLOG_TML_E ("Fail to kill reader thread!");
