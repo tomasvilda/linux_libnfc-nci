@@ -222,7 +222,8 @@ int nfcManager_isNfcConnected()
 
 int nfcManager_isNfcConfigured()
 {
-    return phNxpNciHal_isConfigured();
+    int raw = phNxpNciHal_isConfigured();
+    return ((raw & 0xFF) == 0x03) ? 1 : 0;
 }
 
 int nfcManager_doReconnect()
