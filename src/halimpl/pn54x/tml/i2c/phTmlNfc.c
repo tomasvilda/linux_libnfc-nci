@@ -1107,3 +1107,66 @@ NFCSTATUS phTmlNfc_Shutdown_CleanUp(void)
     return wShutdownStatus;
 }
 
+/*******************************************************************************
+**
+** Function         phTmlNfc_IsConnected
+**
+** Description      Actively probes the NFCC device to check if it is connected
+**                  and responsive on the I2C bus.
+**
+**                  Performs a 1-byte write through the pn5xx driver, which
+**                  translates to i2c_master_send() in the kernel.
+**                  If the chip ACKs, it is connected.
+**                  If it NACKs (returns -EIO), it is disconnected.
+**
+** Parameters       None
+**
+** Returns          1 if NFCC is connected and responsive
+**                  0 if NFCC is disconnected or TML is not initialized
+**
+*******************************************************************************/
+uint8_t phTmlNfc_IsConnected(void)
+{
+    if (NULL == gpphTmlNfc_Context || NULL == gpphTmlNfc_Context->pDevHandle)
+    {
+        return 0;
+    }
+
+    /* Active probe: 1-byte write through the pn5xx driver.
+     * The driver calls i2c_master_send(client, buf, 1) which sends the
+     * I2C address byte + 1 data byte. The chip ACKs if present on the
+     * bus, NACKs if absent (returns -EIO).
+     * The single byte does not form a valid NCI frame (min 3 bytes for
+     * header), so the chip's NCI layer discards it harmlessly.
+     *
+     * PN7150 does not have a standby mode like PN7160, but we still
+     * retry to tolerate transient bus glitches. */
+    uint8_t probe_byte = 0x00;
+    int ret = -1;
+    int i;
+    for (i = 0; i < 3; i++)
+    {
+        ret = write((intptr_t)gpphTmlNfc_Context->pDevHandle, &probe_byte, 1);
+        if (ret > 0) break;
+        usleep(5000); /* 5ms between retries */
+    }
+
+    uint8_t connected = (ret > 0) ? 1 : 0;
+
+    if (connected != gpphTmlNfc_Context->bDeviceConnected)
+    {
+        if (connected)
+        {
+            NXPLOG_TML_D("PN54X - NFCC RECONNECTED (probe)\n");
+            gpphTmlNfc_Context->consecutiveReadFailures = 0;
+        }
+        else
+        {
+            NXPLOG_TML_E("PN54X - NFCC DISCONNECTED (probe)\n");
+        }
+        gpphTmlNfc_Context->bDeviceConnected = connected;
+    }
+
+    return connected;
+}
+

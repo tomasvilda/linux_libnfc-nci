@@ -182,6 +182,11 @@ int nfcManager_isNfcActive()
     return ret;
 }
 
+int nfcManager_isNfcConnected()
+{
+    return (int)phTmlNfc_IsConnected();
+}
+
 int nfcManager_doReconnect()
 {
     int ret;

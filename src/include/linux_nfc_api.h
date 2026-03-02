@@ -639,6 +639,15 @@ extern int nfcManager_doDeinitialize ();
 extern int nfcManager_isNfcActive();
 
 /**
+* \brief Check if NFC controller is connected and responsive.
+* \return 1 if connected, 0 if disconnected or not initialized.
+*
+* Uses an active I2C write probe to check if the NFCC responds.
+* Safe to call from any thread while libnfc-nci is running.
+*/
+extern int nfcManager_isNfcConnected();
+
+/**
 * \brief Attempt to reconnect to the NFC controller after a physical
 *        disconnect/reconnect. Performs full teardown and re-initialization:
 *        close device, re-open, power cycle, CORE_RESET, CORE_INIT,
