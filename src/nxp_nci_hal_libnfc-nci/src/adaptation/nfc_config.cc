@@ -88,7 +88,7 @@ std::string findConfigPath() {
   if (!f_path.empty()) return f_path;
 
   // load default file if the desired file not found.
-  return searchConfigPath("libnfc-nci.conf");
+  return searchConfigPath("libnfc-nci-pn7160.conf");
 }
 #endif
 }  // namespace

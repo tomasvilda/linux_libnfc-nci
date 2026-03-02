@@ -18,6 +18,14 @@
 extern bool nfc_debug_enabled;
 extern string nfc_storage_path;
 using android::base::StringPrintf;
+
+/* Use build-time CONFIG_PATH (set via -DCONFIG_PATH in Makefile.am from
+ * $(sysconfdir)). Falls back to /etc/ if not defined. This replaces the
+ * previously hardcoded //usr//local//etc// paths which broke cross-compiled
+ * and system-level installs (e.g. Yocto/OpenEmbedded). */
+#ifndef CONFIG_PATH
+#define CONFIG_PATH "/etc/"
+#endif
 ConfigPathProvider::ConfigPathProvider() {}
 
 /*******************************************************************************
@@ -83,20 +91,20 @@ string ConfigPathProvider::getFilePath(FileType type) {
         << StringPrintf("%s: enter FileType:0x%02x", __func__, type);
     switch (type) {
     case VENDOR_NFC_CONFIG: {
-        string path = "//usr//local//etc//libnfc-nxp.conf";
+        string path = CONFIG_PATH "libnfc-nxp-pn7160.conf";
         addEnvPathIfAvailable(path);
         return path;
     } break;
     case VENDOR_ESE_CONFIG: {
-        string path = "//usr//local//etc//libese-nxp.conf";
+        string path = CONFIG_PATH "libese-nxp-pn7160.conf";
         addEnvPathIfAvailable(path);
         return path;
     } break;
     case SYSTEM_CONFIG: {
-        const vector<string> searchPath = { "//usr/local//etc//" };
+        const vector<string> searchPath = { CONFIG_PATH };
         for (string path : searchPath) {
             addEnvPathIfAvailable(path);
-            path.append("libnfc-nci.conf");
+            path.append("libnfc-nci-pn7160.conf");
             LOG(INFO) << "path: " << path;
             struct stat file_stat;
             if (stat(path.c_str(), &file_stat) != 0) continue;
@@ -105,38 +113,38 @@ string ConfigPathProvider::getFilePath(FileType type) {
         return "";
     } break;
     case RF_CONFIG: {
-        string path = "//usr//local//etc//libnfc-nxp_RF.conf";
+        string path = CONFIG_PATH "libnfc-nxp-pn7160_RF.conf";
         addEnvPathIfAvailable(path);
         return path;
     } break;
     case TRANSIT_CONFIG: {
-        string path = "//usr/local//etc//libnfc-nxpTransit.conf";
+        string path = CONFIG_PATH "libnfc-nxp-pn7160Transit.conf";
         addEnvPathIfAvailable(path);
         return path;
     } break;
     case NFASTORAGE_BIN: {
-        string path = ".\\data\\nfc";
+        string path = "/data/nfc";
         addEnvPathIfAvailable(path);
         nfc_storage_path.assign(path);
         return nfc_storage_path;
     } break;
     case FIRMWARE_LIB: {
-        string path = "//usr/local//etc//libsn100u_fw.dll";
+        string path = CONFIG_PATH "libsn100u_fw.dll";
         addEnvPathIfAvailable(path);
         return path;
     } break;
     case CONFIG_TIMESTAMP: {
-        string path = "//usr//local//etc//libnfc-nxpConfigState.bin";
+        string path = CONFIG_PATH "libnfc-nxp-pn7160ConfigState.bin";
         addEnvPathIfAvailable(path);
         return path;
     } break;
     case RF_CONFIG_TIMESTAMP: {
-        string path = "//usr//local//etc//libnfc-nxpRFConfigState.bin";
+        string path = CONFIG_PATH "libnfc-nxp-pn7160RFConfigState.bin";
         addEnvPathIfAvailable(path);
         return path;
     } break;
     case TRANSIT_CONFIG_TIMESTAMP: {
-        string path = "//usr//local//etc//libnfc-nxpTransitConfigState.bin";
+        string path = CONFIG_PATH "libnfc-nxp-pn7160TransitConfigState.bin";
         addEnvPathIfAvailable(path);
         return path;
     } break;

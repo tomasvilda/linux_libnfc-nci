@@ -25,6 +25,10 @@
 #include <phNxpNciHal_utils.h>
 #include <phOsalNfc_Timer.h>
 #include <phTmlNfc.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <string.h>
 
 /*
  * Duration of Timer to wait after sending an Nci packet
@@ -107,6 +111,9 @@ NFCSTATUS phTmlNfc_Init(pphTmlNfc_Config_t pConfig) {
              sizeof(phTmlNfc_Context_t));
       /* Make sure that the thread runs once it is created */
       gpphTmlNfc_Context->bThreadDone = 1;
+      /* Initialize connection state tracking */
+      gpphTmlNfc_Context->bDeviceConnected = 1;
+      gpphTmlNfc_Context->consecutiveReadFailures = 0;
 
       /* Open the device file to which data is read/written */
       wInitStatus = gpTransportObj->OpenAndConfigure(
@@ -369,9 +376,13 @@ static void * phTmlNfc_TmlThread(void* pParam) {
             gpTransportObj->Read(gpphTmlNfc_Context->pDevHandle, temp, 260);
 
         if (-1 == dwNoBytesWrRd) {
-          NXPLOG_TML_E("PN54X - Error in I2C Read.....\n");
+          NXPLOG_TML_D("PN54X - I2C Read returned -1 (no data or error)\n");
+          /* With O_NONBLOCK, read returns -EAGAIN when IRQ is low (no NCI
+           * data available). This is normal during idle - NOT an error.
+           * Disconnect detection is handled actively by isNfcConnected()
+           * via write probe, not by counting read timeouts. */
           if (readRetryDelay < MAX_READ_RETRY_DELAY_IN_MILLISEC) {
-            /*sleep for 30/60/90/120/150 msec between each read trial incase of read error*/
+            /*sleep for 30/60/90/120/150 msec between each read trial*/
             readRetryDelay += 30 ;
           }
           usleep(readRetryDelay * 1000);
@@ -386,6 +397,12 @@ static void * phTmlNfc_TmlThread(void* pParam) {
           readRetryDelay =0;
 
           NXPLOG_TML_D("PN54X - I2C Read successful.....\n");
+          /* Reset disconnect tracking on successful read */
+          if (!gpphTmlNfc_Context->bDeviceConnected) {
+            gpphTmlNfc_Context->bDeviceConnected = 1;
+            NXPLOG_TML_D("PN54X - NFCC RECONNECTED\n");
+          }
+          gpphTmlNfc_Context->consecutiveReadFailures = 0;
           /* This has to be reset only after a successful read */
           gpphTmlNfc_Context->tReadInfo.bEnable = 0;
           if ((phTmlNfc_e_EnableRetrans == gpphTmlNfc_Context->eConfig) &&
@@ -1042,3 +1059,4 @@ NFCSTATUS phTmlNfc_Shutdown_CleanUp() {
   phTmlNfc_CleanUp();
   return wShutdownStatus;
 }
+

@@ -149,6 +149,9 @@ typedef struct phTmlNfc_ReadWriteInfo {
 /*
  *Base Context Structure containing members required for entire session
  */
+/* Number of consecutive read failures before declaring device disconnected */
+#define PHTMLNFC_DISCONNECT_THRESHOLD (10U)
+
 typedef struct phTmlNfc_Context {
   pthread_t readerThread; /*Handle to the thread which handles write and read
                              operations */
@@ -171,6 +174,10 @@ typedef struct phTmlNfc_Context {
   sem_t postMsgSemaphore; /* Semaphore to post message atomically by Reader &
                              writer thread */
   pthread_mutex_t readInfoUpdateMutex; /*Mutex to synchronize read Info update*/
+  volatile uint8_t bDeviceConnected;   /* Flag: 1 if NFCC is reachable, 0 if
+                                          disconnected */
+  volatile uint16_t consecutiveReadFailures; /* Counter for sequential I2C read
+                                                errors */
 } phTmlNfc_Context_t;
 
 /*

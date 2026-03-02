@@ -461,7 +461,7 @@ void phNxpNciHal_print_packet(const char* pString, const uint8_t* p_data,
 *******************************************************************************/
 
 void phNxpNciHal_emergency_recovery(void) {
-  if (nfcFL.chipType == pn548C2 && nfcdep_detected && discovery_cmd_len != 0) {
+  if (discovery_cmd_len != 0) {
     pthread_t pthread;
     pthread_attr_t attr;
     pthread_attr_init(&attr);
@@ -471,6 +471,7 @@ void phNxpNciHal_emergency_recovery(void) {
       return;
     }
   }
-  NXPLOG_NCIHAL_E("%s: abort()", __func__);
-  abort();
+  /* Recovery not possible - log error but do NOT abort().
+   * Let the application detect the failure via health checks. */
+  NXPLOG_NCIHAL_E("%s: recovery not possible (no discovery cmd), returning", __func__);
 }

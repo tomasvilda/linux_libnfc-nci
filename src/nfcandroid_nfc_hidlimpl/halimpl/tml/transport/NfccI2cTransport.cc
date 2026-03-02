@@ -38,6 +38,9 @@
 #define FW_DNLD_LEN_OFFSET 1
 #define NORMAL_MODE_LEN_OFFSET 2
 #define FRAGMENTSIZE_MAX PHNFC_I2C_FRAGMENT_SIZE
+/* PN7160 standby recovery: retry writes that get NACKed */
+#define MAX_I2C_WRITE_RETRY 3
+#define I2C_WRITE_RETRY_DELAY_US 5000
 extern phTmlNfc_i2cfragmentation_t fragmentation_enabled;
 extern phTmlNfc_Context_t *gpphTmlNfc_Context;
 /*******************************************************************************
@@ -87,6 +90,17 @@ NFCSTATUS NfccI2cTransport::OpenAndConfigure(pphTmlNfc_Config_t pConfig,
   }
 
   *pLinkHandle = (void *)((intptr_t)nHandle);
+
+  /* Set non-blocking mode for reads. The pn5xx driver lacks poll(), so
+   * select() always returns immediately and blocking reads hang forever
+   * when the chip is idle or disconnected. With O_NONBLOCK, reads return
+   * -EAGAIN when no data is available (IRQ low), allowing proper timeout
+   * handling and freeing the driver's read_mutex for write probes. */
+  int flags = fcntl(nHandle, F_GETFL, 0);
+  if (flags >= 0) {
+    fcntl(nHandle, F_SETFL, flags | O_NONBLOCK);
+  }
+
   if (0 != sem_init(&mTxRxSemaphore, 0, 1)) {
     NXPLOG_TML_E("%s Failed: reason sem_init : retval %x", __func__, nHandle);
   }
@@ -292,7 +306,23 @@ int NfccI2cTransport::Write(void *pDevHandle, uint8_t *pBuffer,
       }
     }
     SemTimedWait();
-    ret = write((intptr_t)pDevHandle, pBuffer + numWrote, numBytes - numWrote);
+    int write_retry;
+    for (write_retry = 0; write_retry < MAX_I2C_WRITE_RETRY; write_retry++) {
+      ret = write((intptr_t)pDevHandle, pBuffer + numWrote, numBytes - numWrote);
+      if (ret > 0) {
+        break;
+      } else if (ret < 0 && (errno == EINTR || errno == EAGAIN)) {
+        continue;
+      } else if (ret < 0) {
+        /* PN7160 may NACK when in standby - retry after short delay */
+        NXPLOG_TML_D("%s write failed (try %d/%d), errno: %x, maybe in standby",
+                     __func__, write_retry + 1, MAX_I2C_WRITE_RETRY, errno);
+        usleep(I2C_WRITE_RETRY_DELAY_US);
+      } else {
+        /* ret == 0: EOF */
+        break;
+      }
+    }
     SemPost();
     if (ret > 0) {
       numWrote += ret;
@@ -304,10 +334,8 @@ int NfccI2cTransport::Write(void *pDevHandle, uint8_t *pBuffer,
       NXPLOG_TML_D("%s EOF", __func__);
       return -1;
     } else {
-      NXPLOG_TML_D("%s errno : %x", __func__, errno);
-      if (errno == EINTR || errno == EAGAIN) {
-        continue;
-      }
+      NXPLOG_TML_D("%s errno : %x (after %d retries)", __func__, errno,
+                   MAX_I2C_WRITE_RETRY);
       return -1;
     }
   }

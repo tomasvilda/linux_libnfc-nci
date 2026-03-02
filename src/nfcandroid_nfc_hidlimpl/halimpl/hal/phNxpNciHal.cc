@@ -614,6 +614,8 @@ int phNxpNciHal_MinOpen (){
   memset(&tOsalConfig, 0x00, sizeof(tOsalConfig));
   memset(&tTmlConfig, 0x00, sizeof(tTmlConfig));
   memset(&nxpprofile_ctrl, 0, sizeof(phNxpNciProfile_Control_t));
+  /* Clear stale FW download flag from any previous failed MinOpen call */
+  sIsForceFwDownloadReqd = false;
 
   /*Init binary semaphore for Spi Nfc synchronization*/
   if (0 != sem_init(&nxpncihal_ctrl.syncSpiNfc, 0, 1)) {
@@ -788,6 +790,28 @@ force_download:
 
 clean_and_return:
   CONCURRENCY_UNLOCK();
+  /* Clean up TML layer: stop reader/writer threads, close device, free context.
+   * Some failure paths above already call phTmlNfc_Shutdown_CleanUp() before
+   * jumping here — that's safe because both Shutdown and CleanUp check for NULL
+   * and become no-ops if TML was already cleaned up or never initialized. */
+  phTmlNfc_Shutdown_CleanUp();
+  /* Kill HAL client thread if it was started */
+  if (nxpncihal_ctrl.thread_running == 1) {
+    nxpncihal_ctrl.thread_running = 0;
+    /* Send dummy message to unblock phDal4Nfc_msgrcv sem_wait */
+    if (nxpncihal_ctrl.gDrvCfg.nClientId != 0) {
+      phLibNfc_Message_t dummy_msg;
+      memset(&dummy_msg, 0, sizeof(dummy_msg));
+      phDal4Nfc_msgsnd(nxpncihal_ctrl.gDrvCfg.nClientId, &dummy_msg, 0);
+    }
+    pthread_join(nxpncihal_ctrl.client_thread, NULL);
+    NXPLOG_NCIHAL_D("HAL client thread joined after MinOpen failure");
+  }
+  /* Destroy message queue */
+  if (nxpncihal_ctrl.gDrvCfg.nClientId != 0) {
+    phDal4Nfc_msgctl(nxpncihal_ctrl.gDrvCfg.nClientId, 0, NULL);
+    nxpncihal_ctrl.gDrvCfg.nClientId = 0;
+  }
   if (nfc_dev_node != NULL) {
     free(nfc_dev_node);
     nfc_dev_node = NULL;
@@ -938,7 +962,8 @@ retry_core_init:
 
   return NFCSTATUS_SUCCESS;
 FAILURE:
-  abort();
+  NXPLOG_NCIHAL_E("%s: recovery failed, NFCC unresponsive", __func__);
+  return NFCSTATUS_FAILED;
 }
 
 void phNxpNciHal_discovery_cmd_ext(uint8_t* p_cmd_data, uint16_t cmd_len) {

@@ -202,6 +202,7 @@ static bool sP2pActive = false;  // whether p2p was last active
 static bool sAbortConnlessWait = false;
 static jint sLfT3tMax = 0;
 static bool sRoutingInitialized = false;
+static bool sNfaAdaptationInitialized = false;  // tracks whether NfcAdaptation::Initialize() was called
 
 #define CONFIG_UPDATE_TECH_MASK (1 << 1)
 #define DEFAULT_TECH_MASK                                                  \
@@ -978,11 +979,8 @@ void nfaDeviceManagementCallback(uint8_t dmEvent,
 #ifndef LINUX
       PowerSwitch::getInstance().initialize(PowerSwitch::UNKNOWN_LEVEL);
 #endif
-      LOG(ERROR) << StringPrintf("%s: crash NFC service", __func__);
-      //////////////////////////////////////////////
-      // crash the NFC service process so it can restart automatically
-      abort();
-      //////////////////////////////////////////////
+      LOG(ERROR) << StringPrintf("%s: NFC controller timeout/transport error", __func__);
+      // On Linux, don't abort - let the application detect failure via health checks
     } break;
 
     case NFA_DM_PWR_MODE_CHANGE_EVT:
@@ -1240,6 +1238,15 @@ if ((signal(SIGABRT, sig_handler) == SIG_ERR) &&
     {
         NXPLOG_API_E("Failed to register signal handler");
     }
+
+  // If a previous init failed without doDeinitialize(), clean up first
+  if (sNfaAdaptationInitialized) {
+    DLOG_IF(INFO, nfc_debug_enabled)
+        << StringPrintf("%s: cleaning up stale adaptation from previous failed init", __func__);
+    NfcAdaptation& staleInstance = NfcAdaptation::GetInstance();
+    staleInstance.Finalize();
+    sNfaAdaptationInitialized = false;
+  }
 #else
   //powerSwitch.initialize(PowerSwitch::FULL_POWER);
 #endif
@@ -1247,6 +1254,7 @@ if ((signal(SIGABRT, sig_handler) == SIG_ERR) &&
 
     NfcAdaptation& theInstance = NfcAdaptation::GetInstance();
     theInstance.Initialize();  // start GKI, NCI task, NFC task
+    sNfaAdaptationInitialized = true;
 
     {
       SyncEventGuard guard(sNfaEnableEvent);
@@ -1387,7 +1395,15 @@ if (stat == NFA_STATUS_OK) {
       stat = NFA_Disable(FALSE /* ungraceful */);
     }
 
+    // Do NOT call Finalize() here on Linux. Leave the NfcAdaptation instance
+    // alive with GKI running. The caller must call doDeinitialize() to clean up.
+    // Calling Finalize() here corrupts GKI global state (gki_cb), making any
+    // subsequent doInitialize() segfault because GKI_init() cannot safely
+    // re-initialize already-destroyed pthread mutexes.
+#ifndef LINUX
     theInstance.Finalize();
+    sNfaAdaptationInitialized = false;
+#endif
   }
 
 TheEnd:
@@ -1799,8 +1815,11 @@ INT32 nfcManager_doDeinitialize(JNIEnv*, jobject) {
     sNfaEnableDisablePollingEvent.notifyOne();
   }
 
-  NfcAdaptation& theInstance = NfcAdaptation::GetInstance();
-  theInstance.Finalize();
+  if (sNfaAdaptationInitialized) {
+    NfcAdaptation& theInstance = NfcAdaptation::GetInstance();
+    theInstance.Finalize();
+    sNfaAdaptationInitialized = false;
+  }
 
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
 #ifdef LINUX
