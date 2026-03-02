@@ -26,6 +26,12 @@
 #include "nativeNfcLlcp.h"
 #include "phTmlNfc.h"
 #include "phNxpNciHal.h"
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <stdint.h>
+
+#define PN544_SET_PWR _IOW(0xe9, 0x01, uint32_t)
 
 int ndef_readText(unsigned char *ndef_buff, unsigned int ndef_buff_length, char * out_text, unsigned int out_text_length)
 {
@@ -180,6 +186,33 @@ int nfcManager_isNfcActive()
     int ret;
     ret = nativeNfcManager_isNfcActive();
     return ret;
+}
+
+int nfcManager_isDevicePresent()
+{
+    int fd = open("/dev/pn544", O_RDWR | O_NONBLOCK);
+    if (fd < 0) return 0;
+
+    /* Toggle VEN to wake chip from deep sleep (harmless on PN7150
+     * which has no deep sleep, but makes the API work identically
+     * on both PN7150 and PN7160). */
+    ioctl(fd, PN544_SET_PWR, 0);   /* VEN low  */
+    usleep(10000);                  /* 10ms     */
+    ioctl(fd, PN544_SET_PWR, 1);   /* VEN high */
+    usleep(10000);                  /* 10ms boot */
+
+    unsigned char probe = 0x00;
+    int connected = 0;
+    int i;
+    for (i = 0; i < 3; i++) {
+        if (write(fd, &probe, 1) > 0) {
+            connected = 1;
+            break;
+        }
+        usleep(5000);
+    }
+    close(fd);
+    return connected;
 }
 
 int nfcManager_isNfcConnected()

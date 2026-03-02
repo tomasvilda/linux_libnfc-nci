@@ -648,6 +648,15 @@ extern int nfcManager_isNfcActive();
 extern int nfcManager_isNfcConnected();
 
 /**
+* \brief Check if NFC hardware is physically present on the I2C bus.
+*        Opens the device node, sends a 1-byte I2C write probe, closes it.
+*        Retries 3 times with 5ms delay to tolerate transient NACKs.
+*        Does NOT require nfcManager_doInitialize() - safe to call at any time.
+* \return 1 if device ACKs on I2C, 0 if absent or device node unavailable.
+*/
+extern int nfcManager_isDevicePresent();
+
+/**
 * \brief Probe whether the NFCC still holds its NCI configuration.
 *        Sends CORE_GET_CONFIG for NXP proprietary param 0xA007 which is set
 *        to 0x03 during full init.  After a chip reset (e.g. brief physical
