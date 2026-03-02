@@ -268,8 +268,8 @@ void nfc_ncif_cmd_timeout (void)
     {
         nfc_enabled (NFC_STATUS_FAILED, NULL);
     }
-    /* XXX maco since this failure is unrecoverable, abort the process */
-    abort();
+    /* Log error instead of aborting — let upper layers handle recovery */
+    NFC_TRACE_ERROR0("cmd_timeout: NFCC unresponsive (abort removed)");
 #endif
 }
 

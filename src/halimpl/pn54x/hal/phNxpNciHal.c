@@ -68,6 +68,10 @@ static uint8_t gRecFwRetryCount; //variable to hold dummy FW recovery count
 
 static uint8_t Rx_data[NCI_MAX_DATA_LEN];
 
+/* Last RF_DISCOVER command - stored for replay after reconnect */
+static uint8_t discovery_cmd[NCI_MAX_DATA_LEN];
+static uint16_t discovery_cmd_len = 0;
+
 uint32_t timeoutTimerId = 0;
 phNxpNciHal_Sem_t config_data;
 
@@ -644,6 +648,12 @@ force_download:
         }
 #else
         phDnldNfc_ReSetHwDevHandle();
+        /* FW download disabled: if we got here via force_download with a
+         * failure status, clean up properly instead of falling through. */
+        if (wConfigStatus != NFCSTATUS_SUCCESS)
+        {
+            goto clean_and_return;
+        }
 #endif
 
     }
@@ -654,6 +664,23 @@ force_download:
 
     clean_and_return:
     CONCURRENCY_UNLOCK();
+    /* Clean up TML layer: stop reader/writer threads, close device, free context.
+     * Some failure paths above already call phTmlNfc_Shutdown() before
+     * jumping here — that's safe because Shutdown checks for NULL context. */
+    phTmlNfc_Shutdown_CleanUp();
+    /* Clean up client thread (detached) and message queue.
+     * The thread blocks in sem_wait inside phDal4Nfc_msgrcv —
+     * send a dummy message to unblock it, then release the queue. */
+    if (nxpncihal_ctrl.thread_running == 1)
+    {
+        nxpncihal_ctrl.thread_running = 0;
+        phLibNfc_Message_t dummyMsg;
+        memset(&dummyMsg, 0, sizeof(dummyMsg));
+        dummyMsg.eMsgType = NCI_HAL_ERROR_MSG;
+        phDal4Nfc_msgsnd(nxpncihal_ctrl.gDrvCfg.nClientId, &dummyMsg, 0);
+        usleep(1000);
+    }
+    phDal4Nfc_msgrelease(nxpncihal_ctrl.gDrvCfg.nClientId);
     /* Report error status */
     (*nxpncihal_ctrl.p_nfc_stack_cback)(HAL_NFC_OPEN_CPLT_EVT,
             HAL_NFC_STATUS_FAILED);
@@ -717,6 +744,15 @@ int phNxpNciHal_write(uint16_t data_len, const uint8_t *p_data)
     /* Create local copy of cmd_data */
     memcpy(nxpncihal_ctrl.p_cmd_data, p_data, data_len);
     nxpncihal_ctrl.cmd_len = data_len;
+
+    /* Store RF_DISCOVER command for replay after reconnect.
+     * RF_DISCOVER is GID=0x21 OID=0x03. */
+    if (data_len >= 3 && p_data[0] == 0x21 && p_data[1] == 0x03) {
+        memcpy(discovery_cmd, p_data, data_len);
+        discovery_cmd_len = data_len;
+        NXPLOG_NCIHAL_D("Stored RF_DISCOVER command (%d bytes) for reconnect replay",
+                         data_len);
+    }
 
 #ifdef P2P_PRIO_LOGIC_HAL_IMP
     /* Specific logic to block RF disable when P2P priority logic is busy */
@@ -2315,6 +2351,143 @@ static void phNxpNciHal_power_cycle_complete(NFCSTATUS status)
             &msg);
 
     return;
+}
+
+/******************************************************************************
+ * Function         phNxpNciHal_Reconnect
+ *
+ * Description      Performs a full teardown and re-initialization of the NFCC
+ *                  connection. Used to recover from physical disconnect/reconnect
+ *                  of the I2C NFC chip (e.g. PN7150). The sequence is:
+ *                  1. Abort pending TML read/write
+ *                  2. Shutdown TML threads
+ *                  3. Close stale device handle
+ *                  4. Re-initialize TML (re-open device, restart threads)
+ *                  5. Power cycle NFCC via VEN ioctl
+ *                  6. Send NCI CORE_RESET + CORE_INIT
+ *                  7. Re-enable I2C fragmentation
+ *                  8. Re-enable RF discovery if previously configured
+ *
+ * Returns          NFCSTATUS_SUCCESS on successful reconnection
+ *                  NFCSTATUS_FAILED on failure
+ *
+ ******************************************************************************/
+int phNxpNciHal_Reconnect(void)
+{
+    NFCSTATUS status = NFCSTATUS_FAILED;
+    phTmlNfc_Config_t tTmlConfig;
+    char* nfc_dev_node = NULL;
+    const uint16_t max_len = 260;
+
+    /*NCI_RESET_CMD*/
+    static uint8_t cmd_reset_nci[] = {0x20, 0x00, 0x01, 0x01};
+    /*NCI_INIT_CMD*/
+    static uint8_t cmd_init_nci[] = {0x20, 0x01, 0x00};
+
+    NXPLOG_NCIHAL_D("%s: Starting reconnection sequence", __func__);
+
+    /* Step 1: Abort pending TML operations */
+    phTmlNfc_ReadAbort();
+    phTmlNfc_WriteAbort();
+
+    /* Step 2: Shutdown TML threads */
+    phOsalNfc_Timer_Cleanup();
+    status = phTmlNfc_Shutdown();
+    if (status != NFCSTATUS_SUCCESS) {
+        NXPLOG_NCIHAL_E("%s: TML Shutdown failed, status=%d", __func__, status);
+    }
+
+    /* Step 3: Close stale device handle and clean up */
+    phTmlNfc_Shutdown_CleanUp();
+    usleep(500 * 1000); /* 500ms wait for device to stabilize */
+
+    /* Step 4: Re-read device node and re-initialize TML */
+    nfc_dev_node = (char*)nxp_malloc(max_len * sizeof(char));
+    if (nfc_dev_node == NULL) {
+        NXPLOG_NCIHAL_E("%s: malloc failed", __func__);
+        return NFCSTATUS_FAILED;
+    }
+    if (!GetNxpStrValue(NAME_NXP_NFC_DEV_NODE, nfc_dev_node,
+                        max_len * sizeof(uint8_t))) {
+        strcpy(nfc_dev_node, "/dev/pn54x");
+    }
+
+    memset(&tTmlConfig, 0x00, sizeof(tTmlConfig));
+    tTmlConfig.pDevName = (int8_t*)nfc_dev_node;
+    tTmlConfig.dwGetMsgThreadId = (uintptr_t)nxpncihal_ctrl.gDrvCfg.nClientId;
+
+    int init_retry;
+    for (init_retry = 0; init_retry < MAX_RETRY_COUNT; init_retry++) {
+        status = phTmlNfc_Init(&tTmlConfig);
+        if (status == NFCSTATUS_SUCCESS) {
+            break;
+        }
+        NXPLOG_NCIHAL_D("%s: TML Init retry %d/%d", __func__, init_retry + 1,
+                        MAX_RETRY_COUNT);
+        usleep(200 * 1000);
+    }
+
+    free(nfc_dev_node);
+    nfc_dev_node = NULL;
+
+    if (status != NFCSTATUS_SUCCESS) {
+        NXPLOG_NCIHAL_E("%s: TML Re-Init failed after %d retries", __func__,
+                        MAX_RETRY_COUNT);
+        return NFCSTATUS_FAILED;
+    }
+
+    /* Step 5: Post a pending read before sending NCI commands */
+    status = phTmlNfc_Read(
+        nxpncihal_ctrl.p_cmd_data, NCI_MAX_DATA_LEN,
+        (pphTmlNfc_TransactCompletionCb_t)&phNxpNciHal_read_complete, NULL);
+    if (status != NFCSTATUS_PENDING) {
+        NXPLOG_NCIHAL_E("%s: TML Read post failed, status=%x", __func__, status);
+        phTmlNfc_Shutdown_CleanUp();
+        return NFCSTATUS_FAILED;
+    }
+
+    /* Step 6: Send NCI CORE_RESET with retries */
+    phNxpNciHal_ext_init();
+    for (init_retry = 0; init_retry < MAX_RETRY_COUNT; init_retry++) {
+        status = phNxpNciHal_send_ext_cmd(sizeof(cmd_reset_nci), cmd_reset_nci);
+        if (status == NFCSTATUS_SUCCESS) {
+            break;
+        }
+        NXPLOG_NCIHAL_D("%s: CORE_RESET retry %d/%d", __func__, init_retry + 1,
+                        MAX_RETRY_COUNT);
+        phTmlNfc_IoCtl(phTmlNfc_e_ResetDevice);
+        usleep(100 * 1000);
+    }
+
+    if (status != NFCSTATUS_SUCCESS) {
+        NXPLOG_NCIHAL_E("%s: CORE_RESET failed after retries", __func__);
+        phTmlNfc_Shutdown_CleanUp();
+        return NFCSTATUS_FAILED;
+    }
+
+    /* Step 7: Send NCI CORE_INIT (NCI 1.0 for PN7150) */
+    status = phNxpNciHal_send_ext_cmd(sizeof(cmd_init_nci), cmd_init_nci);
+    if (status != NFCSTATUS_SUCCESS) {
+        NXPLOG_NCIHAL_E("%s: CORE_INIT failed", __func__);
+        phTmlNfc_Shutdown_CleanUp();
+        return NFCSTATUS_FAILED;
+    }
+
+    /* Step 8: Re-enable I2C fragmentation */
+    phNxpNciHal_enable_i2c_fragmentation();
+
+    /* Step 9: Re-enable RF discovery if previously configured */
+    if (discovery_cmd_len > 0) {
+        status = phNxpNciHal_send_ext_cmd(discovery_cmd_len, discovery_cmd);
+        if (status != NFCSTATUS_SUCCESS) {
+            NXPLOG_NCIHAL_E("%s: RF_DISCOVER re-enable failed", __func__);
+            /* Non-fatal: the caller can re-enable discovery */
+        }
+    }
+
+    nxpncihal_ctrl.halStatus = HAL_STATUS_OPEN;
+    NXPLOG_NCIHAL_D("%s: Reconnection successful", __func__);
+    return NFCSTATUS_SUCCESS;
 }
 
 /******************************************************************************

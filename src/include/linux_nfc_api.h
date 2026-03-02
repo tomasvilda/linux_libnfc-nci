@@ -639,6 +639,18 @@ extern int nfcManager_doDeinitialize ();
 extern int nfcManager_isNfcActive();
 
 /**
+* \brief Attempt to reconnect to the NFC controller after a physical
+*        disconnect/reconnect. Performs full teardown and re-initialization:
+*        close device, re-open, power cycle, CORE_RESET, CORE_INIT,
+*        and re-enable RF discovery.
+* \return 0 if success, otherwise failed.
+*
+* After successful reconnect, tag callbacks remain registered but discovery
+* must be re-enabled by the caller if the default is not sufficient.
+*/
+extern int nfcManager_doReconnect();
+
+/**
 * \brief Start nfc discovery.
 * \param technologies_masks:  Nfc technology mask.
 * \param reader_only_mode:  indicates if enable reader only mode. (Means no P2P or HCE)

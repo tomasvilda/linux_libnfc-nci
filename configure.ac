@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-AC_INIT([libnfc_nci_linux], [1.0])
+AC_INIT([libnfc_nci_pn7150], [1.0])
 AM_INIT_AUTOMAKE([foreign subdir-objects color-tests])
 AC_CONFIG_HEADERS([config.h])
 
@@ -45,7 +45,7 @@ AC_CHECK_FUNCS([select])
 AC_CHECK_FUNCS([dlopen])
 
 AC_CONFIG_FILES([Makefile])
-AC_CONFIG_FILES([libnfc-nci.pc])
+AC_CONFIG_FILES([libnfc-nci-pn7150.pc])
 
 test -z "$SED" && SED=sed
 

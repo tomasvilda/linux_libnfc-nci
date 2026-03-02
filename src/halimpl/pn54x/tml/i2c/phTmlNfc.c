@@ -25,7 +25,7 @@
 #include <phTmlNfc_i2c.h>
 #include <phNxpNciHal_utils.h>
 
-#define CUSTOM_MAX_READ_ERROR_BEFORE_ABORT 100
+#define CUSTOM_MAX_READ_ERROR_BEFORE_ABORT 5
 static uint8_t s_customReadErrCounter = 0;
 
 /*
@@ -108,6 +108,9 @@ NFCSTATUS phTmlNfc_Init(pphTmlNfc_Config_t pConfig)
             memset(gpphTmlNfc_Context, PH_TMLNFC_RESET_VALUE, sizeof(phTmlNfc_Context_t));
             /* Make sure that the thread runs once it is created */
             gpphTmlNfc_Context->bThreadDone = 1;
+            /* Initialize connection state tracking */
+            gpphTmlNfc_Context->bDeviceConnected = 1;
+            gpphTmlNfc_Context->consecutiveReadFailures = 0;
 
             /* Open the device file to which data is read/written */
             wInitStatus = phTmlNfc_i2c_open_and_configure(pConfig, &(gpphTmlNfc_Context->pDevHandle));
@@ -429,6 +432,12 @@ static void phTmlNfc_TmlThread(void *pParam)
                     memcpy(gpphTmlNfc_Context->tReadInfo.pBuffer, temp, dwNoBytesWrRd);
 
                     NXPLOG_TML_D("PN54X - I2C Read successful.....\n");
+                    /* Reset disconnect tracking on successful read */
+                    if (!gpphTmlNfc_Context->bDeviceConnected) {
+                        gpphTmlNfc_Context->bDeviceConnected = 1;
+                        NXPLOG_TML_D("PN54X - NFCC RECONNECTED\n");
+                    }
+                    gpphTmlNfc_Context->consecutiveReadFailures = 0;
                     /* This has to be reset only after a successful read */
                     gpphTmlNfc_Context->tReadInfo.bEnable = 0;
                     if ((phTmlNfc_e_EnableRetrans == gpphTmlNfc_Context->eConfig) &&
@@ -703,6 +712,7 @@ NFCSTATUS phTmlNfc_Shutdown(void)
         usleep(1000);
         sem_post(&gpphTmlNfc_Context->postMsgSemaphore);
         usleep(1000);
+
         if (0 != pthread_join(gpphTmlNfc_Context->readerThread, (void**)NULL))
         {
             NXPLOG_TML_E ("Fail to kill reader thread!");
@@ -1074,3 +1084,26 @@ phTmlNfc_i2cfragmentation_t phTmlNfc_get_fragmentation_enabled()
 {
     return  fragmentation_enabled;
 }
+
+/*******************************************************************************
+**
+** Function         phTmlNfc_Shutdown_CleanUp
+**
+** Description      Calls Shutdown then CleanUp. Safe to call even if TML is
+**                  already shut down or was never initialized (becomes a no-op).
+**
+** Parameters       None
+**
+** Returns          NFCSTATUS_SUCCESS or forwarded error from Shutdown
+**
+*******************************************************************************/
+NFCSTATUS phTmlNfc_Shutdown_CleanUp(void)
+{
+    NFCSTATUS wShutdownStatus = NFCSTATUS_SUCCESS;
+    if (NULL != gpphTmlNfc_Context)
+    {
+        wShutdownStatus = phTmlNfc_Shutdown();
+    }
+    return wShutdownStatus;
+}
+

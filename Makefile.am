@@ -1,27 +1,29 @@
-lib_LTLIBRARIES = libnfc_nci_linux.la
+lib_LTLIBRARIES = libnfc_nci_pn7150.la
 
-sbin_PROGRAMS = nfcDemoApp 
-nfcDemoApp_DEPENDENCIES = libnfc_nci_linux.la
+sbin_PROGRAMS = nfcDemoApp_pn7150 
+nfcDemoApp_pn7150_DEPENDENCIES = libnfc_nci_pn7150.la
 
 configdir = ${sysconfdir}
 
-config_DATA = conf/libnfc-nci.conf conf/libnfc-nxp-init.conf \
-				conf/libnfc-nxp-pn547.conf conf/libnfc-nxp-pn548.conf
+config_DATA = conf/libnfc-nci-pn7150.conf conf/libnfc-nxp-pn7150-init.conf \
+				conf/libnfc-nxp-pn7150-pn547.conf conf/libnfc-nxp-pn7150-pn548.conf
  
 pkgconfiglibdir = $(libdir)/pkgconfig
 
 pkgconfiglib_DATA = \
-	libnfc-nci.pc
+	libnfc-nci-pn7150.pc
+
+pn7150includedir = $(includedir)/pn7150
 
 AM_CPPFLAGS = \
 	-DCONFIG_PATH='"$(configdir)/"' \
 	-I$(srcdir)/src/include \
 	$(INCLUDE_PARAMS) \
-	$(libnfc_nci_linux_la_FLAGS)
+	$(libnfc_nci_pn7150_la_FLAGS)
 
 AM_LDFLAGS = $(LDFLAGS) -Bstatic 
 
-nfcDemoApp_FLAGS = -I$(srcdir)/demoapp -I$(srcdir)/src/include 
+nfcDemoApp_pn7150_FLAGS = -I$(srcdir)/demoapp -I$(srcdir)/src/include 
 
 if LLCP1_3
 AM_CPPFLAGS += \
@@ -31,7 +33,7 @@ endif
 
 if ABEND
 lib_LTLIBRARIES += libARMBoard.la
-libnfc_nci_linux_la_DEPENDENCIES = libARMBoard.la
+libnfc_nci_pn7150_la_DEPENDENCIES = libARMBoard.la
 AM_CPPFLAGS += \
 	$(libARMBoard_la_FLAGS) 
 endif
@@ -316,56 +318,56 @@ SERVICE_SOURCE := \
 	src/service/linux_nfc_api.c \
 	src/service/linux_nfc_factory_api.c
 
-nfcDemoApp_SOURCES := \
+nfcDemoApp_pn7150_SOURCES := \
 		demoapp/main.c \
 		demoapp/tools.c
 
-libnfc_nci_linux_la_SOURCES = \
+libnfc_nci_pn7150_la_SOURCES = \
 	$(LIBNFC_NCI_SOURCE) \
 	$(HALIMPL_SOURCE) \
 	$(SERVICE_SOURCE)
 
-include_HEADERS = src/include/linux_nfc_api.h src/include/linux_nfc_factory_api.h
+pn7150include_HEADERS = src/include/linux_nfc_api.h src/include/linux_nfc_factory_api.h
 
 INCLUDE_PARAMS :=$(LIBNFC_NCI_INCLUDE:%=-I$(srcdir)/%)
 INCLUDE_PARAMS +=$(HALIMPL_INCLUDE:%=-I$(srcdir)/%)
 INCLUDE_PARAMS +=$(SERVICE_INCLUDE:%=-I$(srcdir)/%)
 
-libnfc_nci_linux_la_FLAGS =
+libnfc_nci_pn7150_la_FLAGS =
 
 if LPCUSBSIO
-libnfc_nci_linux_la_FLAGS += -DPHFL_TML_LPCUSBSIO 
+libnfc_nci_pn7150_la_FLAGS += -DPHFL_TML_LPCUSBSIO 
 endif
 
 if ABEND
-libnfc_nci_linux_la_FLAGS += -DPHFL_TML_ABEND 
+libnfc_nci_pn7150_la_FLAGS += -DPHFL_TML_ABEND 
 endif
 
 if ALT
-libnfc_nci_linux_la_FLAGS += -DPHFL_TML_ALT_NFC 
+libnfc_nci_pn7150_la_FLAGS += -DPHFL_TML_ALT_NFC 
 endif
 
 if DEBUG
-libnfc_nci_linux_la_FLAGS += -DDEBUG
+libnfc_nci_pn7150_la_FLAGS += -DDEBUG
 else
-libnfc_nci_linux_la_FLAGS += -DNDEBUG
+libnfc_nci_pn7150_la_FLAGS += -DNDEBUG
 endif
 
-libnfc_nci_linux_la_FLAGS += -pthread -w
-libnfc_nci_linux_la_FLAGS += -DNFC_NXP_NOT_OPEN_INCLUDED=TRUE
-libnfc_nci_linux_la_FLAGS += -DNXP_HW_SELF_TEST
-libnfc_nci_linux_la_FLAGS += -DNXP_NFC_NATIVE_ENABLE_HCE=TRUE
+libnfc_nci_pn7150_la_FLAGS += -pthread -w
+libnfc_nci_pn7150_la_FLAGS += -DNFC_NXP_NOT_OPEN_INCLUDED=TRUE
+libnfc_nci_pn7150_la_FLAGS += -DNXP_HW_SELF_TEST
+libnfc_nci_pn7150_la_FLAGS += -DNXP_NFC_NATIVE_ENABLE_HCE=TRUE
 
 if LLCP1_3
-libnfc_nci_linux_la_FLAGS += -DNFC_NXP_LLCP_SECURED_P2P=TRUE
+libnfc_nci_pn7150_la_FLAGS += -DNFC_NXP_LLCP_SECURED_P2P=TRUE
 else
-libnfc_nci_linux_la_FLAGS += -DNFC_NXP_LLCP_SECURED_P2P=FALSE
+libnfc_nci_pn7150_la_FLAGS += -DNFC_NXP_LLCP_SECURED_P2P=FALSE
 endif
 
-libnfc_nci_linux_la_FLAGS += -DPH_NCI_NXP_HAL_ENABLE_FW_DOWNLOAD=FALSE
+libnfc_nci_pn7150_la_FLAGS += -DPH_NCI_NXP_HAL_ENABLE_FW_DOWNLOAD=FALSE
 
-libnfc_nci_linux_la_LIBADD = $(AC_LIBOBJS)
-libnfc_nci_linux_la_LDFLAGS := $(AM_LDFLAGS)
-libnfc_nci_linux_la_LDFLAGS += -shared -pthread -ldl -lrt -fPIC -release 1 -version-info 0:0:0
+libnfc_nci_pn7150_la_LIBADD = $(AC_LIBOBJS)
+libnfc_nci_pn7150_la_LDFLAGS := $(AM_LDFLAGS)
+libnfc_nci_pn7150_la_LDFLAGS += -shared -pthread -ldl -lrt -fPIC -release 1 -version-info 0:0:0
 
-nfcDemoApp_LDFLAGS = -pthread -ldl -lrt -lnfc_nci_linux
+nfcDemoApp_pn7150_LDFLAGS = -pthread -ldl -lrt -lnfc_nci_pn7150

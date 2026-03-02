@@ -153,6 +153,7 @@ static IntervalTimer           scleanupTimerProc_transaction;
 
 static BOOLEAN                 sMultiProtocolSupport=true;
 static BOOLEAN                 sSelectNext=false;
+static bool sNfaAdaptationInitialized = false;  // tracks whether NfcAdaptation::Initialize() was called
 
 void startRfDiscovery (BOOLEAN isStart);
 BOOLEAN isDiscoveryStarted();
@@ -1347,7 +1348,7 @@ INT32 nativeNfcManager_doInitialize ()
     }
     if (!isNxpConfigValid(NXP_CONFIG_TYPE_INIT))
     {
-        NXPLOG_API_E ("%s: can't find libnfc-nxp-init.conf file", __FUNCTION__);
+        NXPLOG_API_E ("%s: can't find libnfc-nxp-pn7150-init.conf file", __FUNCTION__);
         gSyncMutex.unlock();
         return sIsNfaEnabled;
     }
@@ -1360,9 +1361,18 @@ INT32 nativeNfcManager_doInitialize ()
         NXPLOG_API_E("Failed to register signal handler");
     }
 
+    // If a previous init failed without doDeinitialize(), clean up first
+    if (sNfaAdaptationInitialized) {
+        NXPLOG_API_D("%s: cleaning up stale adaptation from previous failed init", __FUNCTION__);
+        NfcAdaptation& staleInstance = NfcAdaptation::GetInstance();
+        staleInstance.Finalize();
+        sNfaAdaptationInitialized = false;
+    }
+
     NfcAdaptation& NfcAdaptInstance = NfcAdaptation::GetInstance();
 
     NfcAdaptInstance.Initialize(); //start GKI, NCI task, NFC task
+    sNfaAdaptationInitialized = true;
     {
         SyncEventGuard guard (sNfaEnableEvent);
         tHAL_NFC_ENTRY* halFuncEntries = NfcAdaptInstance.GetHalEntryFuncs ();
@@ -1441,7 +1451,12 @@ INT32 nativeNfcManager_doInitialize ()
         stat = NFA_Disable (FALSE /* ungraceful */);
     }
 
-    NfcAdaptInstance.Finalize();
+    // Do NOT call Finalize() here on Linux. Leave the NfcAdaptation instance
+    // alive with GKI running. The caller must call doDeinitialize() to clean up.
+    // Calling Finalize() here corrupts GKI global state (gki_cb), making any
+    // subsequent doInitialize() segfault because GKI_init() cannot safely
+    // re-initialize already-destroyed pthread mutexes.
+    // The stale cleanup at the start of doInitialize() handles this case.
 
 TheEnd:
     NXPLOG_API_D ("%s: nfc enabled = %x", __FUNCTION__, sIsNfaEnabled);
@@ -1513,8 +1528,11 @@ INT32 nativeNfcManager_doDeinitialize ()
         sNfaEnableDisablePollingEvent.notifyOne ();
     }
 
-    NfcAdaptation& theInstance = NfcAdaptation::GetInstance();
-    theInstance.Finalize();
+    if (sNfaAdaptationInitialized) {
+        NfcAdaptation& theInstance = NfcAdaptation::GetInstance();
+        theInstance.Finalize();
+        sNfaAdaptationInitialized = false;
+    }
 
     NXPLOG_API_D ("%s: exit", __FUNCTION__);
     gSyncMutex.unlock();
