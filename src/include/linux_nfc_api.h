@@ -651,6 +651,16 @@ extern int doDeinitialize ();
 extern int isNfcActive();
 
 /**
+* \brief Check if NFC controller is connected and responsive.
+* \return 1 if connected, 0 if disconnected or not initialized.
+*
+* This tracks consecutive I2C read failures. After 10 consecutive failures,
+* the NFCC is considered disconnected. The state resets on successful I2C read.
+* Safe to call from any thread while libnfc-nci is running.
+*/
+extern int isNfcConnected();
+
+/**
 * \brief Start nfc discovery.
 * \param technologies_masks:  Nfc technology mask.
 * \param reader_only_mode:  indicates if enable reader only mode. (Means no P2P or HCE)

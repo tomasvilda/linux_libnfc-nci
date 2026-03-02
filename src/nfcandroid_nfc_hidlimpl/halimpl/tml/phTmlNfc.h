@@ -246,4 +246,5 @@ void phTmlNfc_ConfigNciPktReTx(phTmlNfc_ConfigRetrans_t eConfig,
 void phTmlNfc_set_fragmentation_enabled(phTmlNfc_i2cfragmentation_t enable);
 phTmlNfc_i2cfragmentation_t phTmlNfc_get_fragmentation_enabled();
 NFCSTATUS phTmlNfc_ConfigTransport();
+uint8_t phTmlNfc_IsConnected(void);
 #endif /*  PHTMLNFC_H  */

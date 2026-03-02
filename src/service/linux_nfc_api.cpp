@@ -27,6 +27,7 @@
 #include "nativeNfcLlcp.h"
 #include "phNxpLog.h"
 #include "NativeT4tNfcee.h"
+#include "phTmlNfc.h"
 int ndef_readText(unsigned char *ndef_buff, unsigned int ndef_buff_length, char * out_text, unsigned int out_text_length)
 {
     return nativeNdef_readText(ndef_buff, ndef_buff_length, out_text, out_text_length);
@@ -201,6 +202,11 @@ int isNfcActive()
     int ret;
     ret = nfcManager_isNfcActive();
     return ret;
+}
+
+int isNfcConnected()
+{
+    return (int)phTmlNfc_IsConnected();
 }
 
 void doEnableDiscovery (int technologies_mask,
