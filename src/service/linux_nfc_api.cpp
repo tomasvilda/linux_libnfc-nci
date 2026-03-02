@@ -241,7 +241,8 @@ int isNfcConnected()
 
 int isNfcConfigured()
 {
-    return phNxpNciHal_isConfigured();
+    int raw = phNxpNciHal_isConfigured();
+    return ((raw & 0xFF) == 0x03) ? 1 : 0;
 }
 
 void doEnableDiscovery (int technologies_mask,

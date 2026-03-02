@@ -676,8 +676,7 @@ extern int isNfcConnected();
 *        disconnect) this value reverts to its default.
 *        Use this to detect silent chip resets where isNfcConnected() still
 *        returns 1 but the chip lost its config.
-* \return Encoded word: (hal_status<<24 | rsp_len<<16 | nci_status<<8 | param_val).
-*         Application checks: (retval & 0xFF) == 0x03 means configured.
+* \return 1 if configured, 0 if config lost or check failed.
 */
 extern int isNfcConfigured();
 
