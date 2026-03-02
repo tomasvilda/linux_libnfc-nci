@@ -183,5 +183,6 @@ int phNxpNciHal_write_unlocked (uint16_t data_len, const uint8_t *p_data);
 tNFC_chipType phNxpNciHal_getChipType(void);
 tNFC_chipType phNxpNciHal_deriveChipType(uint8_t* msg, uint16_t msg_len);
 int phNxpNciHal_Reconnect(void);
+int phNxpNciHal_isConfigured(void);
 
 #endif /* _PHNXPNCIHAL_H_ */

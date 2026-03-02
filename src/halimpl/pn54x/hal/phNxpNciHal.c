@@ -2491,6 +2491,52 @@ int phNxpNciHal_Reconnect(void)
 }
 
 /******************************************************************************
+ * Function         phNxpNciHal_isConfigured
+ *
+ * Description      Probe whether the NFCC still holds the application-level
+ *                  NCI configuration written during phNxpNciHal_core_initialized().
+ *                  Reads proprietary param 0xA007 (VEN pull-down config) which
+ *                  is set to 0x03 during every full init.  After a chip reset
+ *                  (even a partial one) this value reverts to its default.
+ *
+ * Returns          1  param matches expected value - config intact
+ *                  0  command failed, value wrong, or chip was reset
+ *
+ ******************************************************************************/
+int phNxpNciHal_isConfigured(void)
+{
+    /* CORE_GET_CONFIG for proprietary param 0xA007 (1 param, 2-byte ID) */
+    static uint8_t cmd_get_cfg[] = {0x20, 0x03, 0x03, 0x01, 0xA0, 0x07};
+    NFCSTATUS status;
+    uint8_t rsp_len;
+    uint8_t nci_status;
+    uint8_t param_val;
+
+    CONCURRENCY_LOCK();
+    status = phNxpNciHal_send_ext_cmd(sizeof(cmd_get_cfg), cmd_get_cfg);
+    /* Snapshot response inside lock before NCI traffic can overwrite p_rx_data */
+    rsp_len    = (nxpncihal_ctrl.rx_data_len > 255) ? 255
+                 : (uint8_t)nxpncihal_ctrl.rx_data_len;
+    nci_status = (rsp_len >= 4) ? nxpncihal_ctrl.p_rx_data[3] : 0xFF;
+    param_val  = (rsp_len >= 9) ? nxpncihal_ctrl.p_rx_data[8] : 0xFF;
+    CONCURRENCY_UNLOCK();
+
+    /*
+     * Encode debug info into return value for application-level diagnostics:
+     *   Bits 31-24: NFCSTATUS from send_ext_cmd
+     *   Bits 23-16: rx_data_len (capped at 255)
+     *   Bits 15-8:  rx[3] (NCI status byte) or 0xFF if too short
+     *   Bits 7-0:   rx[8] (param value)     or 0xFF if too short
+     *
+     * Application checks: if (val & 0xFF) == 0x03 -> configured.
+     */
+    return (int)(((uint32_t)status   << 24) |
+                 ((uint32_t)rsp_len  << 16) |
+                 ((uint32_t)nci_status << 8) |
+                 ((uint32_t)param_val));
+}
+
+/******************************************************************************
  * Function         phNxpNciHal_set_clock
  *
  * Description      This function is called after successfull download
