@@ -661,6 +661,18 @@ extern int isNfcActive();
 extern int isNfcConnected();
 
 /**
+* \brief Probe whether the NFCC still holds its NCI configuration.
+*        Sends CORE_GET_CONFIG for NXP proprietary param 0xA007 which is set
+*        to 0x03 during full init.  After a chip reset (e.g. brief physical
+*        disconnect) this value reverts to its default.
+*        Use this to detect silent chip resets where isNfcConnected() still
+*        returns 1 but the chip lost its config.
+* \return Encoded word: (hal_status<<24 | rsp_len<<16 | nci_status<<8 | param_val).
+*         Application checks: (retval & 0xFF) == 0x03 means configured.
+*/
+extern int isNfcConfigured();
+
+/**
 * \brief Start nfc discovery.
 * \param technologies_masks:  Nfc technology mask.
 * \param reader_only_mode:  indicates if enable reader only mode. (Means no P2P or HCE)

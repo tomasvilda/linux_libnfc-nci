@@ -189,6 +189,7 @@ void phNxpNciHal_release_control(void);
 int phNxpNciHal_write_unlocked(uint16_t data_len, const uint8_t* p_data);
 NFCSTATUS phNxpNciHal_core_reset_recovery();
 void phNxpNciHal_discovery_cmd_ext(uint8_t* p_cmd_data, uint16_t cmd_len);
+int phNxpNciHal_isConfigured(void);
 /*******************************************************************************
 **
 ** Function         phNxpNciHal_configFeatureList
