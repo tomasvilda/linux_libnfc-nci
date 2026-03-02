@@ -28,6 +28,8 @@
 *.x86_64
 *.hex
 nfcDemoApp
+nfcDemoApp_pn7150
+nfcDemoApp_pn7160
 
 # Debug files
 *.dSYM/
@@ -62,6 +64,15 @@ Makefile
 /missing
 /stamp-h1
 /libnfc-nci.pc
+/libnfc-nci-pn7150.pc
+/libnfc-nci-pn7160.pc
+/config1.h
+/config1.h.in
+*-libtool
+
+# Test binaries
+test_pn7150_minimal
+test_pn7150_minimal.c
 
 # Editor
 *.orig
