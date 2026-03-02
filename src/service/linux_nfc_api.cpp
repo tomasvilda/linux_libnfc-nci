@@ -29,6 +29,11 @@
 #include "NativeT4tNfcee.h"
 #include "phTmlNfc.h"
 #include "phNxpNciHal.h"
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <stdint.h>
+#define PN544_SET_PWR _IOW(0xe9, 0x01, uint32_t)
 int ndef_readText(unsigned char *ndef_buff, unsigned int ndef_buff_length, char * out_text, unsigned int out_text_length)
 {
     return nativeNdef_readText(ndef_buff, ndef_buff_length, out_text, out_text_length);
@@ -203,6 +208,30 @@ int isNfcActive()
     int ret;
     ret = nfcManager_isNfcActive();
     return ret;
+}
+
+int isDevicePresent()
+{
+    int fd = open("/dev/pn544", O_RDWR | O_NONBLOCK);
+    if (fd < 0) return 0;
+
+    /* Toggle VEN to wake PN7160 from deep sleep */
+    ioctl(fd, PN544_SET_PWR, 0);   /* VEN low  */
+    usleep(10000);                  /* 10ms     */
+    ioctl(fd, PN544_SET_PWR, 1);   /* VEN high */
+    usleep(10000);                  /* 10ms boot */
+
+    unsigned char probe = 0x00;
+    int connected = 0;
+    for (int i = 0; i < 3; i++) {
+        if (write(fd, &probe, 1) > 0) {
+            connected = 1;
+            break;
+        }
+        usleep(5000);
+    }
+    close(fd);
+    return connected;
 }
 
 int isNfcConnected()

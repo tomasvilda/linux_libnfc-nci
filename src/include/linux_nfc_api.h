@@ -651,6 +651,15 @@ extern int doDeinitialize ();
 extern int isNfcActive();
 
 /**
+* \brief Check if NFC hardware is physically present on the I2C bus.
+*        Opens the device node, sends a 1-byte I2C write probe, closes it.
+*        Retries 3 times with 5ms delay to tolerate PN7160 standby NACKs.
+*        Does NOT require doInitialize() — safe to call at any time.
+* \return 1 if device ACKs on I2C, 0 if absent or device node unavailable.
+*/
+extern int isDevicePresent();
+
+/**
 * \brief Check if NFC controller is connected and responsive.
 * \return 1 if connected, 0 if disconnected or not initialized.
 *
