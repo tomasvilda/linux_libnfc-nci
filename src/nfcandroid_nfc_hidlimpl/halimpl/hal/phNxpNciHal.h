@@ -53,6 +53,7 @@ typedef void(phNxpNciHal_control_granted_callback_t)();
 #define CORE_RESET_TRIGGER_TYPE_POWERED_ON 0x01
 #define NCI_MSG_CORE_RESET 0x00
 #define NCI_MSG_CORE_INIT 0x01
+#define NCI_MSG_CORE_GET_CONFIG 0x03
 #define NCI_MT_MASK 0xE0
 #define NCI_OID_MASK 0x3F
 
@@ -128,6 +129,9 @@ typedef struct phNxpNciHal_Control {
   uint8_t p_cmd_data[NCI_MAX_DATA_LEN];
   uint16_t rsp_len;
   uint8_t p_rsp_data[NCI_MAX_DATA_LEN];
+  bool_t config_probe_active;
+  uint16_t config_probe_rsp_len;
+  uint8_t config_probe_rsp_data[NCI_MAX_DATA_LEN];
 
   /* retry count used to force download */
   uint16_t retry_cnt;

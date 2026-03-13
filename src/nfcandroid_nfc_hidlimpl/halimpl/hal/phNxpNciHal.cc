@@ -141,6 +141,10 @@ NFCSTATUS phNxpNciHal_nfcc_core_reset_init();
 NFCSTATUS phNxpNciHal_getChipInfoInFwDnldMode(void);
 static NFCSTATUS phNxpNciHalRFConfigCmdRecSequence();
 static NFCSTATUS phNxpNciHal_CheckRFCmdRespStatus();
+static bool phNxpNciHal_is_config_probe_rsp(const uint8_t* p_rsp_data,
+                                            uint16_t rsp_len);
+static void phNxpNciHal_store_config_probe_rsp(const uint8_t* p_rsp_data,
+                                               uint16_t rsp_len);
 int check_config_parameter();
 #ifdef FactoryOTA
 void phNxpNciHal_isFactoryOTAModeActive();
@@ -1256,6 +1260,7 @@ static void phNxpNciHal_write_complete(void* pContext,
 static void phNxpNciHal_read_complete(void* pContext,
                                       phTmlNfc_TransactInfo_t* pInfo) {
   NFCSTATUS status = NFCSTATUS_FAILED;
+  bool is_config_probe_rsp = false;
   int sem_val;
   UNUSED(pContext);
   if (nxpncihal_ctrl.read_retry_cnt == 1) {
@@ -1277,6 +1282,13 @@ static void phNxpNciHal_read_complete(void* pContext,
     else{
         nxpncihal_ctrl.p_rx_data = pInfo->pBuff;
         nxpncihal_ctrl.rx_data_len = pInfo->wLength;
+        if (nxpncihal_ctrl.config_probe_active == TRUE &&
+            phNxpNciHal_is_config_probe_rsp(nxpncihal_ctrl.p_rx_data,
+                                            nxpncihal_ctrl.rx_data_len)) {
+          phNxpNciHal_store_config_probe_rsp(nxpncihal_ctrl.p_rx_data,
+                                             nxpncihal_ctrl.rx_data_len);
+          is_config_probe_rsp = true;
+        }
         status = phNxpNciHal_process_ext_rsp(nxpncihal_ctrl.p_rx_data,
                                           &nxpncihal_ctrl.rx_data_len);
     }
@@ -1295,9 +1307,15 @@ static void phNxpNciHal_read_complete(void* pContext,
         NXPLOG_NCIHAL_D("enter into NFCC init recovery");
         nxpncihal_ctrl.ext_cb_data.status = status;
       }
+      /* Wait for the matching CORE_GET_CONFIG response during config probes. */
+      if (nxpncihal_ctrl.config_probe_active == TRUE) {
+        if (is_config_probe_rsp) {
+          SEM_POST(&(nxpncihal_ctrl.ext_cb_data));
+        }
+      }
       /* Unlock semaphore only for responses*/
-      if ((nxpncihal_ctrl.p_rx_data[0x00] & NCI_MT_MASK) == NCI_MT_RSP ||
-          ((icode_detected == true) && (icode_send_eof == 3))) {
+      else if ((nxpncihal_ctrl.p_rx_data[0x00] & NCI_MT_MASK) == NCI_MT_RSP ||
+               ((icode_detected == true) && (icode_send_eof == 3))) {
         /* Unlock semaphore */
         SEM_POST(&(nxpncihal_ctrl.ext_cb_data));
       }
@@ -2647,6 +2665,35 @@ static void phNxpNciHal_power_cycle_complete(NFCSTATUS status) {
 
   return;
 }
+
+static bool phNxpNciHal_is_config_probe_rsp(const uint8_t* p_rsp_data,
+                                            uint16_t rsp_len) {
+  if (p_rsp_data == NULL || rsp_len < 4) {
+    return false;
+  }
+
+  if ((p_rsp_data[0] & NCI_MT_MASK) != NCI_MT_RSP ||
+      (p_rsp_data[1] & NCI_OID_MASK) != NCI_MSG_CORE_GET_CONFIG) {
+    return false;
+  }
+
+  if (rsp_len < 8 || p_rsp_data[3] != NFCSTATUS_SUCCESS) {
+    return true;
+  }
+
+  return p_rsp_data[4] == 0x01 && p_rsp_data[5] == 0xA0 &&
+         p_rsp_data[6] == 0x07 && p_rsp_data[7] == 0x01;
+}
+
+static void phNxpNciHal_store_config_probe_rsp(const uint8_t* p_rsp_data,
+                                               uint16_t rsp_len) {
+  uint16_t copy_len = (rsp_len > NCI_MAX_DATA_LEN) ? NCI_MAX_DATA_LEN : rsp_len;
+
+  nxpncihal_ctrl.config_probe_rsp_len = copy_len;
+  if (copy_len > 0) {
+    memcpy(nxpncihal_ctrl.config_probe_rsp_data, p_rsp_data, copy_len);
+  }
+}
 /******************************************************************************
  * Function         phNxpNciHal_isConfigured
  *
@@ -2656,8 +2703,11 @@ static void phNxpNciHal_power_cycle_complete(NFCSTATUS status) {
  *                  is set to 0x03 during every full init.  After a chip reset
  *                  (even a partial one) this value reverts to its default.
  *
- * Returns          1  param matches expected value — config intact
- *                  0  command failed, value wrong, or chip was reset
+ * Returns          Encoded probe result:
+ *                    Bits 31-24: NFCSTATUS from send_ext_cmd
+ *                    Bits 23-16: captured CORE_GET_CONFIG_RSP length
+ *                    Bits 15-8:  NCI status byte (or 0xFF if unavailable)
+ *                    Bits 7-0:   param value (or 0xFF if unavailable)
  *
  ******************************************************************************/
 int phNxpNciHal_isConfigured(void) {
@@ -2669,12 +2719,21 @@ int phNxpNciHal_isConfigured(void) {
   uint8_t param_val;
 
   CONCURRENCY_LOCK();
+  nxpncihal_ctrl.config_probe_active = TRUE;
+  nxpncihal_ctrl.config_probe_rsp_len = 0;
   status = phNxpNciHal_send_ext_cmd(sizeof(cmd_get_cfg), cmd_get_cfg);
-  /* Snapshot response inside lock before NCI traffic can overwrite p_rx_data */
-  rsp_len    = (nxpncihal_ctrl.rx_data_len > 255) ? 255
-               : (uint8_t)nxpncihal_ctrl.rx_data_len;
-  nci_status = (rsp_len >= 4) ? nxpncihal_ctrl.p_rx_data[3] : 0xFF;
-  param_val  = (rsp_len >= 9) ? nxpncihal_ctrl.p_rx_data[8] : 0xFF;
+  nxpncihal_ctrl.config_probe_active = FALSE;
+  rsp_len = (nxpncihal_ctrl.config_probe_rsp_len > 255)
+                ? 255
+                : (uint8_t)nxpncihal_ctrl.config_probe_rsp_len;
+  nci_status = (rsp_len >= 4) ? nxpncihal_ctrl.config_probe_rsp_data[3] : 0xFF;
+  param_val = (rsp_len >= 9 && nxpncihal_ctrl.config_probe_rsp_data[4] == 0x01 &&
+               nxpncihal_ctrl.config_probe_rsp_data[5] == 0xA0 &&
+               nxpncihal_ctrl.config_probe_rsp_data[6] == 0x07 &&
+               nxpncihal_ctrl.config_probe_rsp_data[7] == 0x01)
+                  ? nxpncihal_ctrl.config_probe_rsp_data[8]
+                  : 0xFF;
+  nxpncihal_ctrl.config_probe_rsp_len = 0;
   CONCURRENCY_UNLOCK();
 
   /*

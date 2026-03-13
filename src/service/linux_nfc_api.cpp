@@ -34,6 +34,9 @@
 #include <sys/ioctl.h>
 #include <stdint.h>
 #define PN544_SET_PWR _IOW(0xe9, 0x01, uint32_t)
+
+static int sLastKnownNfcConfigured = 0;
+
 int ndef_readText(unsigned char *ndef_buff, unsigned int ndef_buff_length, char * out_text, unsigned int out_text_length)
 {
     return nativeNdef_readText(ndef_buff, ndef_buff_length, out_text, out_text_length);
@@ -192,6 +195,7 @@ int doInitialize ()
 {
     int ret;
     bool status = nfcManager_doInitialize();
+    sLastKnownNfcConfigured = status ? 1 : 0;
     ret = (status)?NFA_STATUS_OK:NFA_STATUS_FAILED;
     return ret;
 }
@@ -200,6 +204,7 @@ int doDeinitialize ()
 {
     int ret;
     ret = nfcManager_doDeinitialize();
+    sLastKnownNfcConfigured = 0;
     return ret;
 }
 
@@ -241,8 +246,14 @@ int isNfcConnected()
 
 int isNfcConfigured()
 {
+    if (nativeNfcTag_isConfigCheckDeferred() == TRUE)
+    {
+        return sLastKnownNfcConfigured;
+    }
+
     int raw = phNxpNciHal_isConfigured();
-    return ((raw & 0xFF) == 0x03) ? 1 : 0;
+    sLastKnownNfcConfigured = ((raw & 0xFF) == 0x03) ? 1 : 0;
+    return sLastKnownNfcConfigured;
 }
 
 void doEnableDiscovery (int technologies_mask,

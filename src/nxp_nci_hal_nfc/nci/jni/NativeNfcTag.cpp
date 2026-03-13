@@ -34,6 +34,7 @@
  ******************************************************************************/
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
+#include <atomic>
 #include <errno.h>
 #include <malloc.h>
 #ifndef LINUX
@@ -74,8 +75,11 @@ extern bool legacy_mfc_reader;
 #ifdef LINUX
 #define DEFAULT_PRESENCE_CHECK_MDELAY 125
 #define DEFAULT_GENERAL_TRANS_TIMEOUT  2000
+static const uint64_t kConfigCheckSettleMs = 3000;
 nfcTagCallback_t     *gTagCallback = NULL;
 extern Mutex         gSyncMutex;
+static std::atomic<bool> sConfigCheckTagActive(false);
+static std::atomic<uint64_t> sLastConfigCheckTagDepartureMs(0);
 static SyncEvent     sNfaVSCResponseEvent;
 static SyncEvent     sNfaVSCNotificationEvent;
 static bool          sPresCheckRequired = TRUE;
@@ -86,6 +90,23 @@ static void presenceCheckTimerProc (union sigval);
 static void nfaVSCCallback(uint8_t event, UINT16 param_len, uint8_t *p_param);
 static void nfaVSCNtfCallback(uint8_t event, UINT16 param_len, uint8_t *p_param);
 void nativeNfcTag_releasePresenceCheck();
+static uint64_t nativeNfcTag_getMonotonicMs() {
+    struct timespec now;
+
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (static_cast<uint64_t>(now.tv_sec) * 1000ULL) +
+           (static_cast<uint64_t>(now.tv_nsec) / 1000000ULL);
+}
+
+static void nativeNfcTag_markConfigCheckTagActive() {
+    sConfigCheckTagActive = true;
+}
+
+static void nativeNfcTag_markConfigCheckTagInactive() {
+    sConfigCheckTagActive = false;
+    sLastConfigCheckTagDepartureMs = nativeNfcTag_getMonotonicMs();
+}
+
 static void sReconnectTimerProc(union sigval);
 #if(NFC_NXP_NOT_OPEN_INCLUDED == TRUE)
 bool                 isMifare = FALSE;
@@ -1697,6 +1718,23 @@ TheEnd:
 *******************************************************************************/
 void nativeNfcTag_resetPresenceCheck() { sIsTagPresent = true; }
 
+BOOLEAN nativeNfcTag_isConfigCheckDeferred(void) {
+  uint64_t last_departure_ms = sLastConfigCheckTagDepartureMs.load();
+
+  if (sConfigCheckTagActive.load()) {
+    return TRUE;
+  }
+
+  if (last_departure_ms == 0) {
+    return FALSE;
+  }
+
+  return (nativeNfcTag_getMonotonicMs() - last_departure_ms) <
+                 kConfigCheckSettleMs
+             ? TRUE
+             : FALSE;
+}
+
 /*******************************************************************************
 **
 ** Function:        nativeNfcTag_doPresenceCheckResult
@@ -2421,6 +2459,7 @@ static void *presenceCheckThread(void *arg)
             }
         }
     }
+    nativeNfcTag_markConfigCheckTagInactive();
     nativeNfcTag_doDisconnect ();
 
     if(!NfcTag::getInstance().mNfcDisableinProgress)
@@ -2565,6 +2604,7 @@ void nativeNfcTag_onTagArrival(nfc_tag_info_t *tag)
 
     sCurrentConnectedHandle = tag->handle;
     sCurrentConnectedTargetType = tag->technology;
+    nativeNfcTag_markConfigCheckTagActive();
     if(!NfcTag::getInstance().mNfcDisableinProgress)
     {
         if(gTagCallback && (NULL != gTagCallback->onTagArrival))
@@ -2591,6 +2631,7 @@ void nativeNfcTag_onTagArrival(nfc_tag_info_t *tag)
         {
             NXPLOG_API_E ("%s: deactivate failed; error=0x%X", __FUNCTION__, nfaStat);
         }
+        nativeNfcTag_markConfigCheckTagInactive();
     }
     else
     {
@@ -2759,6 +2800,7 @@ void nativeNfcTag_releasePresenceCheck ()
 {
     SyncEventGuard guard (sPresenceCheckEvent);
     sIsTagPresent = FALSE;
+    nativeNfcTag_markConfigCheckTagInactive();
     sPresenceCheckEvent.notifyOne ();
 }
 
