@@ -662,7 +662,9 @@ extern int nfcManager_isDevicePresent();
 *        to 0x03 during full init.  After a chip reset (e.g. brief physical
 *        disconnect) this value reverts to its default.
 *        Use this to detect silent chip resets where isNfcConnected() still
-*        returns 1 but the chip lost its config.
+*        returns 1 but the chip lost its config.  While a tag is active or
+*        immediately after deactivation, the last known result is returned
+*        instead of issuing a live probe on the busy RF/NCI path.
 * \return 1 if configured, 0 if config lost or check failed.
 */
 extern int nfcManager_isNfcConfigured();

@@ -33,6 +33,8 @@
 
 #define PN544_SET_PWR _IOW(0xe9, 0x01, uint32_t)
 
+static int sLastKnownNfcConfigured = 0;
+
 int ndef_readText(unsigned char *ndef_buff, unsigned int ndef_buff_length, char * out_text, unsigned int out_text_length)
 {
     return nativeNdef_readText(ndef_buff, ndef_buff_length, out_text, out_text_length);
@@ -171,6 +173,7 @@ int nfcManager_doInitialize ()
 {
     int ret;
     ret = nativeNfcManager_doInitialize();
+    sLastKnownNfcConfigured = (ret == 0) ? 1 : 0;
     return ret;
 }
 
@@ -178,6 +181,7 @@ int nfcManager_doDeinitialize ()
 {
     int ret;
     ret = nativeNfcManager_doDeinitialize();
+    sLastKnownNfcConfigured = 0;
     return ret;
 }
 
@@ -222,8 +226,14 @@ int nfcManager_isNfcConnected()
 
 int nfcManager_isNfcConfigured()
 {
+    if (nativeNfcTag_isConfigCheckDeferred() == TRUE)
+    {
+        return sLastKnownNfcConfigured;
+    }
+
     int raw = phNxpNciHal_isConfigured();
-    return ((raw & 0xFF) == 0x03) ? 1 : 0;
+    sLastKnownNfcConfigured = ((raw & 0xFF) == 0x03) ? 1 : 0;
+    return sLastKnownNfcConfigured;
 }
 
 int nfcManager_doReconnect()

@@ -47,6 +47,7 @@
 #define CORE_RESET_TRIGGER_TYPE_POWERED_ON              0x01
 #define NXP_NCI_MSG_CORE_RESET           0x00
 #define NXP_NCI_MSG_CORE_INIT            0x01
+#define NXP_NCI_MSG_CORE_GET_CONFIG      0x03
 #define NXP_NCI_MT_MASK                  0xE0
 #define NXP_NCI_OID_MASK                 0x3F
 
@@ -134,6 +135,9 @@ typedef struct phNxpNciHal_Control
     uint8_t p_rsp_data[NCI_MAX_DATA_LEN];
     uint16_t cmd_len;
     uint16_t rsp_len;
+    bool_t config_probe_active;
+    uint16_t config_probe_rsp_len;
+    uint8_t config_probe_rsp_data[NCI_MAX_DATA_LEN];
 
 } phNxpNciHal_Control_t;
 

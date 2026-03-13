@@ -93,6 +93,19 @@ extern INT32 nativeNfcTag_switchRF(UINT32 tagHandle, BOOLEAN isFrameRF);
 
 extern INT32 nativeNfcTag_doTransceive (UINT32 handle, UINT8* txBuffer, INT32 txBufferLen, UINT8* rxBuffer, INT32 rxBufferLen, UINT32 timeout);
 
+/*******************************************************************************
+**
+** Function:        nativeNfcTag_isConfigCheckDeferred
+**
+** Description:     Whether `nfcManager_isNfcConfigured()` should defer its live
+**                  HAL probe because a tag is active or has only just
+**                  deactivated.
+**
+** Returns:         TRUE if the config probe should be deferred.
+**
+*******************************************************************************/
+extern BOOLEAN nativeNfcTag_isConfigCheckDeferred(void);
+
 #ifdef __cplusplus
 }
 #endif
